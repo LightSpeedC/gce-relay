@@ -1,3 +1,2 @@
 #
-
-sudo TZ=Asia/Tokyo node web.js
+sudo TZ=Asia/Tokyo node web.js > /dev/null &

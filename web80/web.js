@@ -14,28 +14,22 @@ const RELEASE = '2022-11-21 22:46 JST Release';
 const STARTED = getNow() + ' Started';
 
 const { stdout } = process;
-const DATE_TIME = getNow().replace(/-/g, '').replace(/ /g, '-')
-	.replace(/:/g, '').replace(/\./g, '-');
-const YYYYMM = DATE_TIME.substring(0, 6);
-const YYYYMMDD = DATE_TIME.substring(0, 8);
 
 // mkdir logs
 const LOGS_ROOT = path.resolve(__dirname, '../../gce-relay-logs');
-mkdirSync(path.resolve(LOGS_ROOT, YYYYMM), '1');
-mkdirSync(path.resolve(LOGS_ROOT, YYYYMM, YYYYMMDD), '2');
-const LOGS_PATH = path.resolve(LOGS_ROOT, YYYYMM, YYYYMMDD);
-const LOG_FILE = path.resolve(LOGS_PATH, DATE_TIME + '.log');
-console.log(LOG_FILE);
-const w = fs.createWriteStream(LOG_FILE);
+
+let w = null;
+let yyyymmdd = '00000000';
+logRotate();
 
 // mkdirSync
-function mkdirSync(dir, num) {
+function mkdirSync(dir, num, dt) {
 	try {
 		fs.mkdirSync(dir);
 	} catch (err) {
 		if (err.code !== 'EEXIST') {
 			console.error(err);
-			fs.writeFileSync('../../' + DATE_TIME + '-' + num + '.log',
+			fs.writeFileSync('../../' + dt + '-' + num + '.log',
 				err + os.EOL + err.stack + os.EOL);
 			process.exit(1);
 		}
@@ -53,10 +47,29 @@ function getSeq() {
 	return ('0000' + s).substr(-4);
 }
 
+// logRotate
+function logRotate() {
+	const DATE_TIME = getNow().replace(/-/g, '').replace(/ /g, '-')
+		.replace(/:/g, '').replace(/\./g, '-');
+	const YYYYMMDD = DATE_TIME.substring(0, 8);
+	if (yyyymmdd === YYYYMMDD) return;
+	yyyymmdd = YYYYMMDD;
+	const YYYYMM = DATE_TIME.substring(0, 6);
+
+	// mkdir logs
+	mkdirSync(path.resolve(LOGS_ROOT, YYYYMM), '1', DATE_TIME);
+	const LOGS_PATH = path.resolve(LOGS_ROOT, YYYYMM, YYYYMMDD);
+	mkdirSync(LOGS_PATH, '2', DATE_TIME);
+	const LOG_FILE = path.resolve(LOGS_PATH, DATE_TIME + '.log');
+	if (w) w.close();
+	w = fs.createWriteStream(LOG_FILE);
+}
+
 // http.server
 http.createServer((req, res) => {
 	const dt = getNow() + '-' + getSeq();
 	try {
+		logRotate();
 		const reqUrl = req.url || '';
 		log(dt, req.socket.remoteAddress, req.method, reqUrl);
 		// log(dt, '# Host:', req.headers.host);
