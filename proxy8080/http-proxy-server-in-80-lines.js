@@ -1,20 +1,40 @@
+// http-proxy-server-in-80-lines.js
+
+// https://qiita.com/LightSpeedC/items/5c1edc2c974206c743f4
+
+// @ts-check
+
 'use strict';
-const http = require('http'), url = require('url'), net  = require('net');
+
+const http = require('http');
+const net = require('net');
+
 const HTTP_PORT = process.argv[2] || 8080;  // internal proxy server port
 const PROXY_URL = process.argv[3] || null;  // external proxy server URL
-const PROXY_HOST = PROXY_URL ?  url.parse(PROXY_URL).hostname    : null;
-const PROXY_PORT = PROXY_URL ? (url.parse(PROXY_URL).port || 80) : null;
+const PARSE_URL = PROXY_URL ? new URL(PROXY_URL || '') : {};
+const PROXY_HOST = PROXY_URL ? PARSE_URL.hostname : null;
+const PROXY_PORT = PROXY_URL ? Number(PARSE_URL.port || 80) : null;
 
 const server = http.createServer(function onCliReq(cliReq, cliRes) {
+  // ステルスモード
+  if ('proxy-connection' in cliReq.headers) {
+    // @ts-ignore
+    cliReq.headers.connection = cliReq.headers['proxy-connection'];
+    delete cliReq.headers['proxy-connection'];
+    delete cliReq.headers['cache-control'];
+  }
+
   let svrSoc;
-  const cliSoc = cliReq.socket, x = url.parse(cliReq.url);
+
+  const cliSoc = cliReq.socket, x = new URL(cliReq.url || '');
   const svrReq = http.request({host: PROXY_HOST || x.hostname,
       port: PROXY_PORT || x.port || 80,
-      path: PROXY_URL ? cliReq.url : x.path,
+      path: PROXY_URL ? cliReq.url : x.pathname,
       method: cliReq.method, headers: cliReq.headers,
+      // @ts-ignore
       agent: cliSoc.$agent}, function onSvrRes(svrRes) {
     svrSoc = svrRes.socket;
-    cliRes.writeHead(svrRes.statusCode, svrRes.headers);
+    cliRes.writeHead(svrRes.statusCode || 500, svrRes.headers);
     svrRes.pipe(cliRes);
   });
   cliReq.pipe(svrReq);
@@ -26,11 +46,12 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
 })
 .on('clientError', (err, soc) => onErr(err, 'cliErr', '', soc))
 .on('connect', function onCliConn(cliReq, cliSoc, cliHead) {
-  const x = url.parse('https://' + cliReq.url);
+  const x = new URL('https://' + cliReq.url);
   let svrSoc;
   if (PROXY_URL) {
     const svrReq = http.request({host: PROXY_HOST, port: PROXY_PORT,
         path: cliReq.url, method: cliReq.method, headers: cliReq.headers,
+        // @ts-ignore
         agent: cliSoc.$agent});
     svrReq.end();
     svrReq.on('connect', function onSvrConn(svrRes, svrSoc2, svrHead) {
@@ -45,7 +66,9 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
     svrReq.on('error', err => onErr(err, 'svrRq2', cliReq.url, cliSoc));
   }
   else {
-    svrSoc = net.connect(x.port || 443, x.hostname, function onSvrConn() {
+    svrSoc = net.connect(Number(x.port || 443),
+        x.hostname || undefined,
+        function onSvrConn() {
       cliSoc.write('HTTP/1.0 200 Connection established\r\n\r\n');
       if (cliHead && cliHead.length) svrSoc.write(cliHead);
       cliSoc.pipe(svrSoc);
@@ -56,7 +79,9 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
   cliSoc.on('error', err => onErr(err, 'cliSoc', cliReq.url, svrSoc));
 })
 .on('connection', function onConn(cliSoc) {
+  // @ts-ignore
   cliSoc.$agent = new http.Agent({keepAlive: true});
+  // @ts-ignore
   cliSoc.$agent.on('error', err => console.log('agent:', err));
 })
 .listen(HTTP_PORT, () =>
@@ -67,3 +92,30 @@ function onErr(err, msg, url, soc) {
   if (soc) soc.end();
   console.log('%s %s: %s', new Date().toLocaleTimeString(), msg, url, err + '');
 }
+
+// node http-proxy-server-in-80-lines 8080
+
+// ブラックリスト
+const whiteAddressList = {};
+whiteAddressList['::1'] = true;
+whiteAddressList['::ffff:127.0.0.1'] = true;
+whiteAddressList['::ffff:192.168.251.1'] = true;
+server.on('connection', function onConn(cliSoc) {
+  if ((cliSoc.remoteAddress || 'x') in whiteAddressList) return;
+  console.log(new Date().toLocaleTimeString() +
+    ' reject: from: ' + cliSoc.remoteAddress);
+  cliSoc.destroy();
+});
+
+// 接続時間・接続数の表示
+let connCount = 0;
+server.on('connection', function onConn(cliSoc) {
+  // @ts-ignore
+  cliSoc.connTime = new Date();
+  console.log('++conn: ' + (++connCount) + ' from: ' + cliSoc.remoteAddress);
+  cliSoc.on('close', function onDisconn() {
+    console.log('--conn: ' + (--connCount) + ' time: ' + 
+    // @ts-ignore
+      (new Date() - cliSoc.connTime) / 1000.0 + ' sec');
+  });
+});
