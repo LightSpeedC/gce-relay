@@ -9,42 +9,52 @@ const net = require('net');
 const TARGET_URL = process.argv[2];
 const PROXY_URL = process.argv[3];
 
-const PARSE_TARGET_URL = new URL(TARGET_URL);
-const PARSE_PROXY_URL = PROXY_URL ?
-	new URL(PROXY_URL) : PARSE_TARGET_URL;
+main().catch(console.error);
 
-const CRLF = '\r\n';
+async function main() {
+	await httpRequest(process.stdout, TARGET_URL, PROXY_URL);
+}
 
-console.log(PARSE_PROXY_URL.hostname, Number(PARSE_PROXY_URL.port || 80));
+function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 
-const soc = net.connect({
-	port: Number(PARSE_PROXY_URL.port || 80),
-	host: PARSE_PROXY_URL.hostname,
-	// allowHalfOpen: true,
-	// keepAlive: true,
-},
-// const soc = net.connect(
-// 	Number(PARSE_PROXY_URL.port || 80),
-// 	PARSE_PROXY_URL.hostname,
-() => {
+	return new Promise((resolve, reject) => {
 
-	console.log('HERE');
+		const PARSE_TARGET_URL = new URL(TARGET_URL);
+		const PARSE_PROXY_URL = PROXY_URL ?
+			new URL(PROXY_URL) : PARSE_TARGET_URL;
 
-});
+		const CRLF = '\r\n';
 
-//soc.pipe(process.stdout);
-soc.on('error', err => console.error('***CATCH***', err));
-soc.on('data', data => data && console.log(data.toString()));
-soc.on('end', () => {
-	soc.end();
-	console.log('***END***');
-});
+		const auth = PARSE_PROXY_URL.username ?
+			'Authorization: Basic ' +
+			Buffer.from(PARSE_PROXY_URL.username + ':' + PARSE_PROXY_URL.password)
+				.toString('base64') + CRLF : '';
 
-const msg = 'GET ' +
-	(PROXY_URL ? TARGET_URL : PARSE_TARGET_URL.pathname) +
-	' HTTP/1.1' + CRLF +
-	'Host: ' + PARSE_TARGET_URL.host + CRLF +
-	'Connection: close' + CRLF +
-	CRLF;
-soc.write(msg);
-console.log(msg);
+		console.log(PARSE_PROXY_URL.hostname, Number(PARSE_PROXY_URL.port || 80));
+
+		const port = Number(PARSE_PROXY_URL.port ||
+			(PARSE_PROXY_URL.protocol === 'https:' ? '443' : '80'));
+		const soc = net.connect({
+			port, host: PARSE_PROXY_URL.hostname,
+			// allowHalfOpen: true,
+			// keepAlive: true,
+		}, () => console.log('***CONNECTED***'));
+
+		soc.pipe(writeStream, { end: false });
+		soc.on('error', reject);
+		soc.on('end', () => {
+			soc.end();
+			resolve(undefined);
+			console.log('***END***');
+		});
+
+		// send request
+		const pathname = (PROXY_URL ? TARGET_URL : PARSE_TARGET_URL.pathname);
+		const msg = [['GET', pathname, 'HTTP/1.1'].join(' '),
+			'Host: ' + PARSE_TARGET_URL.host,
+			auth + 'Connection: close',
+			'', ''].join(CRLF);
+		soc.write(msg);
+		writeStream.write(msg);
+	});
+}
