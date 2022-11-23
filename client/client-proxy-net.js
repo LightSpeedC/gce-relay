@@ -25,6 +25,11 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 
 		const CRLF = '\r\n';
 
+		const auth = PARSE_PROXY_URL.username ?
+			'Authorization: Basic ' +
+			Buffer.from(PARSE_PROXY_URL.username + ':' + PARSE_PROXY_URL.password)
+				.toString('base64') + CRLF : '';
+
 		console.log(PARSE_PROXY_URL.hostname, Number(PARSE_PROXY_URL.port || 80));
 
 		const port = Number(PARSE_PROXY_URL.port ||
@@ -47,7 +52,7 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 		const pathname = (PROXY_URL ? TARGET_URL : PARSE_TARGET_URL.pathname);
 		const msg = [['GET', pathname, 'HTTP/1.1'].join(' '),
 			'Host: ' + PARSE_TARGET_URL.host,
-			'Connection: close',
+			auth + 'Connection: close',
 			'', ''].join(CRLF);
 		soc.write(msg);
 		writeStream.write(msg);

@@ -25,14 +25,19 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 
 		const CRLF = '\r\n';
 
+		const auth = PARSE_PROXY_URL.username ? {
+			Authorization: 'Basic ' +
+				Buffer.from(PARSE_PROXY_URL.username + ':' + PARSE_PROXY_URL.password)
+					.toString('base64')
+		} : {};
+		const headers = Object.assign({ Host: PARSE_TARGET_URL.host }, auth);
+
 		const req = http.request({
 			hostname: PARSE_PROXY_URL.hostname,
 			port: PARSE_PROXY_URL.port,
 			path: PROXY_URL ? TARGET_URL : PARSE_TARGET_URL.pathname,
 			method: 'GET',
-			headers: {
-				Host: PARSE_TARGET_URL.host,
-			},
+			headers,
 		}, res => {
 			for (let i = 0; i < res.rawHeaders.length; i += 2)
 				writeStream.write(res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + CRLF);
