@@ -2,16 +2,18 @@
 
 'use strict';
 
+const RELEASE = '2022-11-26 16:53 JST Release (since 2022-11-21)';
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
 const DateTime = require('date-time-string');
 const dnsReverse = require('./dns-reverse');
+const dnsResolve = require('./dns-resolve');
 
 const PORT = 80;
 
-const RELEASE = '2022-11-26 08:50 JST Release (since 2022-11-21)';
 const STARTED = getNow() + ' Started';
 const CRLF = '\r\n';
 
@@ -77,8 +79,11 @@ http.createServer((req, res) => {
 	const reqVer = 'HTTP/' + req.httpVersion;
 	processRequest();
 	async function processRequest() {
-		const clientNames = (await dnsReverse(clientIp)).join(', ');
 		try {
+			const clientNameList = await dnsReverse(clientIp);
+			const list = await Promise.all(clientNameList.filter(x => !x.match(/\d*\.\d*\.\d*\.\d*/)).map(dnsResolve));
+			list.forEach(x => x.forEach(y => !clientNameList.includes(y) && clientNameList.push(y)));
+			const clientNames = clientNameList.join(', ');
 			let info = [clientNames, req.method, serverIp + reqUrl, reqVer].join(' ');
 			logRotate();
 			log(dt, '::', info);
@@ -126,7 +131,7 @@ ${info}
 
 <hr>
 
-${reqBody ? '<b>REQUEST BODY:</b>\n<pre>' + reqBody + '</pre>\n<hr>': ''}
+${reqBody ? '<b>REQUEST BODY:</b>\n<pre>' + reqBody + '</pre>\n<hr>' : ''}
 
 <pre>
 ${dt} Access
