@@ -70,6 +70,21 @@ function logRotate() {
 	w = fs.createWriteStream(LOG_FILE);
 }
 
+// map<string, {date: Date, clientNames: string}>
+const cacheMap = new Map();
+const CLEAR_CACHE_INTERVAL_TIMER = 10 * 60 * 1000; // 10 min.
+const CLEAR_CACHE_TIMEOUT = 20 * 60 * 1000; // 20 min.
+setInterval(() => {
+	const dt = new Date();
+	cacheMap.forEach((val, key) => {
+		const deltaTime = dt.valueOf() - val.date.valueOf();
+		if (deltaTime > CLEAR_CACHE_TIMEOUT) {
+			log(getNow(dt) + '      ? delete cache ip:', key, 'time:', deltaTime, 'msec');
+			cacheMap.delete(key);
+		}
+	});
+}, CLEAR_CACHE_INTERVAL_TIMER);
+
 // http.server
 http.createServer((req, res) => {
 	const dtStart = new Date();
@@ -81,10 +96,15 @@ http.createServer((req, res) => {
 	processRequest();
 	async function processRequest() {
 		try {
-			const clientNameList = await dnsReverse(clientIp);
-			const list = await Promise.all(clientNameList.filter(x => !x.match(/\d*\.\d*\.\d*\.\d*/)).map(dnsResolve));
-			list.forEach(x => x.forEach(y => !clientNameList.includes(y) && clientNameList.push(y)));
-			const clientNames = clientNameList.join(', ');
+			const ent = cacheMap.get(clientIp);
+			let clientNames = ent && ent.clientNames || '';
+			if (!clientNames) {
+				const clientNameList = await dnsReverse(clientIp);
+				const list = await Promise.all(clientNameList.filter(x => !x.match(/\d*\.\d*\.\d*\.\d*/)).map(dnsResolve));
+				list.forEach(x => x.forEach(y => !clientNameList.includes(y) && clientNameList.push(y)));
+				clientNames = clientNameList.join(', ');
+				cacheMap.set(clientIp, { date: dtStart, clientNames });
+			}
 			let info = [clientNames, req.method, serverIp + reqUrl, reqVer].join(' ');
 			logRotate();
 			log(dt, '::', info);
