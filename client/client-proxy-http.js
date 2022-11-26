@@ -26,7 +26,7 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 		const CRLF = '\r\n';
 
 		const auth = PARSE_PROXY_URL.username ? {
-			Authorization: 'Basic ' +
+			'Proxy-Authorization': 'Basic ' +
 				Buffer.from(PARSE_PROXY_URL.username + ':' + PARSE_PROXY_URL.password)
 					.toString('base64')
 		} : {};
