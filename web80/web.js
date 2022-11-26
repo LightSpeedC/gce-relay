@@ -72,7 +72,8 @@ function logRotate() {
 
 // http.server
 http.createServer((req, res) => {
-	const dt = getNow() + '-' + getSeq();
+	const dtStart = new Date();
+	const dt = getNow(dtStart) + '-' + getSeq();
 	const reqUrl = req.url || '';
 	const clientIp = (req.socket.remoteAddress || '').replace('::ffff:', '');
 	const serverIp = req.headers.host || req.socket.localAddress || '';
@@ -119,6 +120,9 @@ http.createServer((req, res) => {
 				});
 			});
 
+			const deltaTime = Date.now() - dtStart.valueOf();
+			log(dt, '*', deltaTime.toLocaleString(), 'msec.');
+
 			const msg = `
 <h1>Hello, ${clientNames}</h1>
 <h2>${req.method} ${serverIp + reqUrl} ${reqVer}</h2>
@@ -134,7 +138,7 @@ ${info}
 ${reqBody ? '<b>REQUEST BODY:</b>\n<pre>' + reqBody + '</pre>\n<hr>' : ''}
 
 <pre>
-${dt} Access
+${dt} Access, ${deltaTime.toLocaleString()} msec.
 ${STARTED}
 ${RELEASE}
 </pre>
