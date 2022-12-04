@@ -119,9 +119,14 @@ http.createServer((req, res) => {
 			log(dt, '::', info);
 
 			// relayPath
-			if (reqUrl === envConfig.relayPath) {
+			if (reqUrl === envConfig.relayPath &&
+				req.headers[envConfig.xRelayCommand] &&
+				req.headers[envConfig.xRelayOptions] &&
+				req.headers[envConfig.xRelayStatus]) {
 				return await relay(req, res, log, dt);
 			}
+			if (reqUrl === envConfig.relayPath)
+				log(dt, '%', req.method, reqUrl, 'protocol error');
 
 			// favicon
 			if (req.method === 'GET' && reqUrl === '/favicon.ico') {
@@ -181,11 +186,16 @@ ${RELEASE}
 			res.end(msg);
 		} catch (err) {
 			log(dt, err + os.EOL + err.stack);
-			res.end('err');
+			try {
+				res.end('err');
+			}
+			catch (err) {
+				log(dt, err + os.EOL + err.stack);
+			}
 		}
 	}
 }).listen(PORT, () => log(getNow(), COLOR_GREEN_BOLD +
-`        port ${PORT}, listening started` + COLOR_RESET));
+	`        port ${PORT}, listening started` + COLOR_RESET));
 
 // getNow
 function getNow(dt = new Date()) {
