@@ -20,7 +20,9 @@ const envNo = Number(process.argv[4] || "0");
 
 const envConfig = envNo === 0 ? require('./env-config') :
 	envNo === 1 ? require('./env-config1') :
-		require('./env-config2');
+	envNo === 2 ? require('./env-config2') :
+	envNo === 3 ? require('./env-config3') :
+		require('./env-config4');
 const { serverName } = envConfig;
 const localServerName = serverName;
 const serverId = uniqId(serverName).split('.').slice(0, 2).join('.');
@@ -236,6 +238,14 @@ async function main() {
 					// [2230] conn.ok
 					else if (cmd === 'conn.ok') {
 						const conn = localConnections.get(connectionId);
+						console.log(dt, localServerName, threadId, '$$$ [conn.ok]', conn);
+						if (conn.status !== 'connecting') throw new Error('eh!? [2230] conn.ok: status != connecting');
+						conn.status = 'connected';
+					}
+					// [2230.xxxx] conn.ok.ok
+					else if (cmd === 'conn.ok.ok') {
+						const conn = localConnections.get(connectionId);
+						// console.log(dt, localServerName, threadId, '$$$ [conn.ok.ok]', conn);
 						if (conn.status !== 'connecting') throw new Error('eh!? [2230] conn.ok: status != connecting');
 						conn.status = 'connected';
 					}

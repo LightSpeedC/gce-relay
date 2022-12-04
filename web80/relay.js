@@ -180,7 +180,7 @@ async function relay(req, res, log, dt) {
 					// console.log(COLOR_RED_BOLD, obj, COLOR_RESET);
 					func.resOK('conn', { x: '[2100]', serverName, serverId, serviceName, connectionId });
 					// [2020]
-					resOK('conn', { connectionId });
+					resOK('conn.ok', { connectionId });
 				}
 				else {
 					resNG('conn.err', { x: '[2100]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
@@ -188,7 +188,7 @@ async function relay(req, res, log, dt) {
 				}
 			}
 			return;
-		case 'conn.ok': // [2210] conn.okresOK
+		case 'conn.ok': // [2210] conn.ok resOK
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
 				const obj = servers.get(serverName);
@@ -203,7 +203,7 @@ async function relay(req, res, log, dt) {
 					throw new Error('conn.ok.err eh!? no buffers');
 				}
 				// [2220] conn.ok
-				func.resOK('conn.ok', { x: '[2220]', serverName, serverId, serviceName, connectionId });
+				func.resOK('conn.ok.ok', { x: '[2220]', serverName, serverId, serviceName, connectionId });
 			}
 			return;
 		case 'send': // [3020] send (local svc -> remote svc)

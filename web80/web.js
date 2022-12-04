@@ -77,8 +77,8 @@ function logRotate() {
 
 // map<string, {date: Date, clientNames: string}>
 const cacheMap = new Map();
-const CLEAR_CACHE_INTERVAL_TIMER = 10 * 60 * 1000; // 10 min.
-const CLEAR_CACHE_TIMEOUT = 20 * 60 * 1000; // 20 min.
+const CLEAR_CACHE_INTERVAL_TIMER = 3 * 3600 * 1000; // 3 hours.
+const CLEAR_CACHE_TIMEOUT = 24 * 3600 * 1000; // 24 hours.
 setInterval(() => {
 	const dt = new Date();
 	cacheMap.forEach((val, key) => {
