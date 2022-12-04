@@ -121,8 +121,7 @@ http.createServer((req, res) => {
 			// relayPath
 			if (reqUrl === envConfig.relayPath &&
 				req.headers[envConfig.xRelayCommand] &&
-				req.headers[envConfig.xRelayOptions] &&
-				req.headers[envConfig.xRelayStatus]) {
+				req.headers[envConfig.xRelayOptions]) {
 				return await relay(req, res, log, dt);
 			}
 			if (reqUrl === envConfig.relayPath)
