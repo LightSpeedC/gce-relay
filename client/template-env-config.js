@@ -24,4 +24,5 @@ module.exports = {
 	xRelayOptions: 'x-relay-options',
 	xRelayStatus: 'x-relay-status',
 	xRelayCode: 0x00,
+	maxThreads: 4,
 };

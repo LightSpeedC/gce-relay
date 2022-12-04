@@ -25,7 +25,7 @@ const { serverName } = envConfig;
 const localServerName = serverName;
 const serverId = uniqId(serverName).split('.').slice(0, 2).join('.');
 const { xRelayCommand, xRelayOptions, xRelayStatus } = envConfig;
-const MAX_THREADS = 4;
+const MAX_THREADS = envConfig.maxThreads || 4;
 
 const COLOR_RESET = '\x1b[m';
 const COLOR_CYAN = '\x1b[36m';
