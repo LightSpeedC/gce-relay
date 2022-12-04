@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2022-11-26 16:53 JST Release (since 2022-11-21)';
+const RELEASE = '2022-11-26 23:21 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
@@ -11,8 +11,13 @@ const http = require('http');
 const DateTime = require('date-time-string');
 const dnsReverse = require('./dns-reverse');
 const dnsResolve = require('./dns-resolve');
+const relay = require('./relay');
+const envConfig = require('./env-config');
 
 const PORT = 80;
+const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
+const COLOR_RESET = '\x1b[m';
+const COLOR_GREEN_BOLD = '\x1b[32;1m';
 
 const STARTED = getNow() + ' Started';
 const CRLF = '\r\n';
@@ -93,7 +98,11 @@ http.createServer((req, res) => {
 	const clientIp = (req.socket.remoteAddress || '').replace('::ffff:', '');
 	const serverIp = req.headers.host || req.socket.localAddress || '';
 	const reqVer = 'HTTP/' + req.httpVersion;
-	processRequest();
+	processRequest().catch(err => {
+		log(dt, '/', err);
+		log(dt, '/', err.stack);
+		console.error(err);
+	});
 	async function processRequest() {
 		try {
 			const ent = cacheMap.get(clientIp);
@@ -109,14 +118,19 @@ http.createServer((req, res) => {
 			logRotate();
 			log(dt, '::', info);
 
+			// relayPath
+			if (reqUrl === envConfig.relayPath) {
+				return await relay(req, res, log, dt);
+			}
+
 			// favicon
-			if (req.method === 'GET' && reqUrl.startsWith('/favicon.ico')) {
-				res.writeHead(200, { 'content-type': 'image/png' });
+			if (req.method === 'GET' && reqUrl === '/favicon.ico') {
+				res.writeHead(200, { 'Content-Type': 'image/png' });
 				res.end(FAVICON);
 				return;
 			}
 
-			res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+			res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
 			for (let i = 0; i < req.rawHeaders.length; i += 2) {
 				log(dt, '= ' + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1]);
 				info += CRLF + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1];
@@ -170,7 +184,8 @@ ${RELEASE}
 			res.end('err');
 		}
 	}
-}).listen(PORT, () => console.log('started'));
+}).listen(PORT, () => log(getNow(), COLOR_GREEN_BOLD +
+`        port ${PORT}, listening started` + COLOR_RESET));
 
 // getNow
 function getNow(dt = new Date()) {
@@ -184,5 +199,5 @@ function log(...args) {
 		return prev;
 	}, '').substring(1) + os.EOL;
 	stdout.write(msg);
-	w.write(msg);
+	w && w.write(msg.replace(COLOR_REGEXP, ''));
 }

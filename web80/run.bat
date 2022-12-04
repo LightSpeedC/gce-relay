@@ -1,5 +1,5 @@
-pushd %~dp0
+@pushd %~dp0
 set TZ=Asia/Tokyo
 node web.js
-popd
-if errorlevel 1 pause
+@popd
+@if errorlevel 1 pause

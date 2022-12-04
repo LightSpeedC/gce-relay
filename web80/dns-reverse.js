@@ -16,5 +16,5 @@ function dnsReverse(ip) {
 		dns.reverse(ip, (err, hostnames) =>
 			resolve(!err ? [...hostnames, ip] :
 				err.code === 'ENOTFOUND' ? [ip] :
-					[ip, err + ''])));
+					[ip, 'dns.reverse(' + ip + '): ' + err + ''])));
 }
