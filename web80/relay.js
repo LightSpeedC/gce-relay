@@ -89,26 +89,26 @@ async function relay(req, res, log, dt) {
 	}
 
 	switch (relayCommand) {
-		case 'recv': // [0110] recv
+		case 'recv': // C[0110] recv
 			{
 				const { serverName, serverId, remoteServiceList } = relayOptions;
-				let obj = servers.get(serverName);
-				if (obj && obj.serverId !== serverId) {
+				let svr = servers.get(serverName);
+				if (svr && svr.serverId !== serverId) {
 					// TODO release or dealloc
-					console.log(dt, '***RELOAD***', serverName, serverId, '<-', obj.serverId);
+					console.log(dt, '***RELOAD***', serverName, serverId, '<-', svr.serverId);
 
 					while (true) {
-						const func = obj.recvs.shift();
+						const func = svr.recvs.shift();
 						if (!func) break;
-						// [0190] disconnect
+						// C[0180] disconnect
 						func.resNG('disconnect', { x: '[discon]', serverName, serverId, remoteServiceList });
 					}
 
 					servers.delete(serverName);
-					obj = null;
+					svr = null;
 				}
-				if (obj) {
-					obj.recvs.push({ resOK, resNG });
+				if (svr) {
+					svr.recvs.push({ resOK, resNG });
 				}
 				else {
 					servers.set(serverName, {
@@ -125,25 +125,26 @@ async function relay(req, res, log, dt) {
 						sends: [],
 					});
 					const serverList = Array.from(servers)
-						.filter(([key]) => key !== serverName)
-						.map(([_, val]) => ({
-							serverId: val.serverId,
-							remoteServiceList: val.remoteServiceList
+						.filter(([svrNm]) => svrNm !== serverName)
+						.map(([_, svr]) => ({
+							serverId: svr.serverId,
+							remoteServiceList: svr.remoteServiceList
 						}));
-					// [0120] init
-					resOK('init', { x: '[0120]', serverName, serverId, remoteServiceList, serverList });
-					servers.forEach((val, key) => {
-						if (key != serverName) {
-							const func = val.recvs.shift();
+					// C[0120] init
+					resOK('init', { x: 'C[0120]', serverName, serverId, remoteServiceList, serverList });
+					servers.forEach((svr, svrNm) => {
+						if (svrNm != serverName) {
+							const func = svr.recvs.shift();
 							func.resOK('init', {
-								serverName: val.serverName,
-								serverId: val.serverId,
-								remoteServiceList: val.remoteServiceList,
+								x: 'C[0130]',
+								serverName: svr.serverName,
+								serverId: svr.serverId,
+								remoteServiceList: svr.remoteServiceList,
 								serverList: Array.from(servers)
-									.filter(([key]) => key !== val.serverName)
-									.map(([_, val2]) => ({
-										serverId: val2.serverId,
-										remoteServiceList: val2.remoteServiceList
+									.filter(([svrNm]) => svrNm !== svr.serverName)
+									.map(([_, svr2]) => ({
+										serverId: svr2.serverId,
+										remoteServiceList: svr2.remoteServiceList
 									}))
 							});
 						}
@@ -151,82 +152,84 @@ async function relay(req, res, log, dt) {
 				}
 			}
 			return;
-		case 'conn': // [2010] conn
+		case 'conn': // C[2010] conn
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('conn.err', { x: '[2010]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+				const locSvr = servers.get(serverName);
+				if (!locSvr) {
+					resNG('conn.err', { x: 'C[2010]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
 					throw new Error('eh!? server not found');
 				}
-				// if (obj.serverId === serverId) throw new Error('eh!?');
-				console.log('obj.serverId:', obj.serverId, 'serverId:', serverId);
+				// if (svr.serverId === serverId) throw new Error('eh!?');
+				console.log('locSvr.serverId:', locSvr.serverId, 'serverId:', serverId);
 				let remoteServerName = '';
-				servers.forEach((val, key) => {
-					if (val.remoteServices[serviceName]) {
-						remoteServerName = key;
+				servers.forEach((remSvr, svrNm) => {
+					if (remSvr.remoteServices[serviceName]) {
+						remoteServerName = svrNm;
 					}
 				});
 
-				// [2100] conn
+				// C[2100] conn
 				if (remoteServerName) {
-					const obj = servers.get(remoteServerName);
-					const func = obj.recvs.shift();
+					const remSvr = servers.get(remoteServerName);
+					const func = remSvr.recvs.shift();
 					if (!func) {
 						resNG('conn.err', { serverName, serverId, serviceName, connectionId, message: 'no buffers' });
 						throw new Error('conn.err eh!? no buffers');
 					}
 					// console.log(COLOR_RED_BOLD, { serverName, serverId, serviceName, connectionId }, COLOR_RESET);
 					// console.log(COLOR_RED_BOLD, obj, COLOR_RESET);
-					func.resOK('conn', { x: '[2100]', serverName, serverId, serviceName, connectionId });
-					// [2020]
-					resOK('conn.ok', { connectionId });
+					func.resOK('conn', { x: 'C[2100]', serverName, serverId, serviceName, connectionId });
+					// C[2020]
+					resOK('conn.ok1', { x: 'C[2020]', connectionId });
 				}
 				else {
-					resNG('conn.err', { x: '[2100]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
+					resNG('conn.err', { x: 'C[2105]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
 					throw new Error('conn.err eh!? remote service not found');
 				}
 			}
 			return;
-		case 'conn.ok': // [2210] conn.ok resOK
+		case 'conn.ok': // C[2210] conn.ok resOK
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('conn.ok.err', { x: '[2210]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+				const locSvr = servers.get(serverName);
+				if (!locSvr) {
+					resNG('conn.ok.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
 					throw new Error('conn.ok.err eh!? server not found');
 				}
 
-				const func = obj.recvs.shift();
+				const func = locSvr.recvs.shift();
 				if (!func) {
-					resNG('conn.ok.err', { x: '[2210]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+					resNG('conn.ok.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
 					throw new Error('conn.ok.err eh!? no buffers');
 				}
-				// [2220] conn.ok
-				func.resOK('conn.ok.ok', { x: '[2220]', serverName, serverId, serviceName, connectionId });
+				// C[2220] conn.ok
+				func.resOK('conn.ok.ok', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
+				resOK('conn.ok.ok2', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
 			}
 			return;
-		case 'send': // [3020] send (local svc -> remote svc)
+		case 'send': // C[3020] send (local svc -> remote svc)
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('send.err', { x: '[3020]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+				const locSvr = servers.get(serverName);
+				if (!locSvr) {
+					resNG('send.err', { x: 'C[3020]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
 					throw new Error('send.err eh!? server not found');
 				}
 				let remoteServerName = '';
-				servers.forEach((val, key) => {
-					if (val.remoteServices[serviceName]) {
-						remoteServerName = key;
+				servers.forEach((svr, svrNm) => {
+					// console.log(COLOR_GREEN, svrNm, svr, COLOR_RESET);
+					if (svr.remoteServices[serviceName]) {
+						remoteServerName = svrNm;
 					}
 				});
 
 				// [3030] send
 				if (remoteServerName) {
-					const obj = servers.get(remoteServerName);
-					const func = obj.recvs.shift();
+					const remSvr = servers.get(remoteServerName);
+					const func = remSvr.recvs.shift();
 					if (!func) {
-						// obj.sends.push(xxx);
+						// remSvr.sends.push(xxx);
 						resNG('send.err', { x: '[3030]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
 						throw new Error('send.err eh!? no buffers');
 					}

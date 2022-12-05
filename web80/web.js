@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2022-11-26 23:21 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-06 01:38 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
@@ -99,8 +99,8 @@ http.createServer((req, res) => {
 	const serverIp = req.headers.host || req.socket.localAddress || '';
 	const reqVer = 'HTTP/' + req.httpVersion;
 	processRequest().catch(err => {
-		log(dt, '/', err);
-		log(dt, '/', err.stack);
+		log(dt, '//', err);
+		log(dt, '//', err.stack);
 		console.error(err);
 	});
 	async function processRequest() {
@@ -114,7 +114,8 @@ http.createServer((req, res) => {
 				clientNames = clientNameList.join(', ');
 				cacheMap.set(clientIp, { date: dtStart, clientNames });
 			}
-			let info = [clientNames, req.method, serverIp + reqUrl, reqVer].join(' ');
+			const serverIpUrl = serverIp + (reqUrl.startsWith('/') ? '' : ' ') + reqUrl;
+			let info = [clientNames, req.method, serverIpUrl, reqVer].join(' ');
 			logRotate();
 			log(dt, '::', info);
 
@@ -125,7 +126,7 @@ http.createServer((req, res) => {
 				return await relay(req, res, log, dt);
 			}
 			if (reqUrl === envConfig.relayPath)
-				log(dt, '%', req.method, reqUrl, 'protocol error');
+				log(dt, '%%', req.method, reqUrl, 'protocol error');
 
 			// favicon
 			if (req.method === 'GET' && reqUrl === '/favicon.ico') {
@@ -136,7 +137,7 @@ http.createServer((req, res) => {
 
 			res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
 			for (let i = 0; i < req.rawHeaders.length; i += 2) {
-				log(dt, '= ' + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1]);
+				log(dt, '== ' + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1]);
 				info += CRLF + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1];
 			}
 
@@ -148,22 +149,22 @@ http.createServer((req, res) => {
 					if (data) {
 						const str = data.toString();
 						reqBody += str;
-						log(dt, '$', str);
+						log(dt, '$$', str);
 						writeFlag = true;
 					}
 				});
 				req.on('end', () => {
-					if (writeFlag) log(dt, '$$$EOF$$$');
+					if (writeFlag) log(dt, '$$ $$$EOF$$$');
 					resolve(reqBody);
 				});
 			});
 
 			const deltaTime = Date.now() - dtStart.valueOf();
-			log(dt, '*', deltaTime.toLocaleString(), 'msec.');
+			log(dt, '**', deltaTime.toLocaleString(), 'msec.');
 
 			const msg = `
 <h1>Hello, ${clientNames}</h1>
-<h2>${req.method} ${serverIp + reqUrl} ${reqVer}</h2>
+<h2>${req.method} ${serverIpUrl} ${reqVer}</h2>
 <hr>
 
 <b>YOUR REQUEST INFO:</b>
