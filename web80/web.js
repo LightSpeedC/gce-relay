@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2022-12-06 01:38 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-10 10:34 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
@@ -18,6 +18,7 @@ const PORT = 80;
 const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
 const COLOR_RESET = '\x1b[m';
 const COLOR_GREEN_BOLD = '\x1b[32;1m';
+const GENERIC_USER_TIMEOUT = 3000;
 
 const STARTED = getNow() + ' Started';
 const CRLF = '\r\n';
@@ -84,7 +85,7 @@ setInterval(() => {
 	cacheMap.forEach((val, key) => {
 		const deltaTime = dt.valueOf() - val.date.valueOf();
 		if (deltaTime > CLEAR_CACHE_TIMEOUT) {
-			log(getNow(dt) + '      ? delete cache ip:', key, 'time:', deltaTime, 'msec');
+			log(getNow(dt) + '      ?? delete cache ip:', key, 'time:', deltaTime, 'msec', val.clientNames);
 			cacheMap.delete(key);
 		}
 	});
@@ -183,7 +184,8 @@ ${RELEASE}
 </pre>
 `;
 
-			res.end(msg);
+			res.write(msg);
+			setTimeout(() => res.end('Did you wait for my response? :-)\n'), GENERIC_USER_TIMEOUT);
 		} catch (err) {
 			log(dt, err + os.EOL + err.stack);
 			try {
