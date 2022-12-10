@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2022-12-10 10:34 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-10 10:54 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
@@ -18,7 +18,7 @@ const PORT = 80;
 const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
 const COLOR_RESET = '\x1b[m';
 const COLOR_GREEN_BOLD = '\x1b[32;1m';
-const GENERIC_USER_TIMEOUT = 3000;
+const GENERIC_USER_TIMEOUT = 20 * 1000; // 20 sec.
 
 const STARTED = getNow() + ' Started';
 const CRLF = '\r\n';
@@ -185,7 +185,9 @@ ${RELEASE}
 `;
 
 			res.write(msg);
-			setTimeout(() => res.end('Did you wait for my response? :-)\n'), GENERIC_USER_TIMEOUT);
+			setTimeout(() => res.write('<br>\nDid you wait for my response?\n'), GENERIC_USER_TIMEOUT);
+			setTimeout(() => res.write('<br>\nReally?\n'), GENERIC_USER_TIMEOUT * 2);
+			setTimeout(() => res.end('<br>\nYou are very patient. :-)\n'), GENERIC_USER_TIMEOUT * 3);
 		} catch (err) {
 			log(dt, err + os.EOL + err.stack);
 			try {
