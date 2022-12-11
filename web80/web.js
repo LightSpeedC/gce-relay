@@ -15,6 +15,7 @@ const envConfig = require('./env-config');
 const getNow = require('../lib/get-now');
 const redError = require('../lib/red-error');
 const frequentErrors = require('../lib/frequent-errors');
+const LOG_LEVEL = require('../lib/log-level');
 
 const PORT = 80;
 const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
@@ -33,6 +34,7 @@ const LOGS_ROOT = path.resolve(__dirname, '../../gce-relay-logs');
 let w = null;
 let yyyymmdd = '00000000';
 logRotate();
+logInit();
 
 // mkdirSync
 function mkdirSync(dir, num, dt) {
@@ -126,7 +128,8 @@ http.createServer((req, res) => {
 			if (reqUrl === envConfig.relayPath &&
 				req.headers[envConfig.xRelayCommand] &&
 				req.headers[envConfig.xRelayOptions]) {
-				if (clientIp !== '::1') log(dt, '::', info);
+				LOG_LEVEL.ERROR >= envConfig.logLevel &&
+					clientIp !== '::1' && log(dt, '::', info);
 				return await relay(req, res, log, dt);
 			}
 			log(dt, '::', info);
@@ -267,4 +270,21 @@ function log(...args) {
 	function onErr(err) {
 		if (err) console.log(err);
 	}
+}
+
+// logInit
+function logInit() {
+	// @ts-ignore
+	log.trace = noop;
+	// @ts-ignore
+	log.info = noop;
+	// @ts-ignore
+	log.debug = noop;
+	// @ts-ignore
+	log.warn = log;
+	// @ts-ignore
+	log.error = log;
+	// @ts-ignore
+	log.fatal = log;
+	function noop() {}
 }

@@ -39,9 +39,10 @@ const COLOR_MAGENTA = '\x1b[35m';
 const localConnections = new Map();
 const remoteConnections = new Map();
 
-main().catch(console.error);
+logInit();
+main(log).catch(console.error);
 
-async function main() {
+async function main(log) {
 	// L:Local
 	envConfig.localServices.forEach(x => {
 		// L[1010]
@@ -57,7 +58,7 @@ async function main() {
 					{ x: 'L[2000]', serverName, serverId, port, serviceName, connectionId });
 				// L[2030] con2
 				if (res1.status !== '200 OK')
-					console.log(getNow(), port, serverName, serviceName, 'L[2030] conn.status:', res1.status);
+					log.warn(getNow(), port, serverName, serviceName, 'L[2030] conn.status:', res1.status);
 
 				const locConn = {
 					socket: soc,
@@ -75,15 +76,18 @@ async function main() {
 					writeLocal(remSeqNo, data, onErr) {
 						this.sends[remSeqNo] = () => {
 							this.socket.write(data, onErr);
-							console.log(getNow(), port, serverName, serviceName, 'wrlc:', connectionId, 'remSeqNo:', remSeqNo, 'writeLocal');
+							log.trace(getNow(), port, serverName, 'wrlc:', serviceName, connectionId, 'remSeqNo:', remSeqNo, 'writeLocal');
 						};
 						this.flushLocal();
 					},
 					endLocal(remSeqNo) {
-						console.log(getNow(), port, serverName, serviceName, 'edlc:', connectionId, 'remSeqNo:', remSeqNo, 'endLocal', !!this.socket);
-						if (this.socket) this.socket.end();
-						// @ts-ignore
-						this.socket = null;
+						this.sends[remSeqNo] = () => {
+							log.trace(getNow(), port, serverName, 'edlc:', serviceName, connectionId, 'remSeqNo:', remSeqNo, 'endLocal', !!this.socket);
+							if (this.socket) this.socket.end();
+							// @ts-ignore
+							this.socket = null;
+						};
+						this.flushLocal();
 					},
 				};
 				localConnections.set(connectionId, locConn);
@@ -91,24 +95,24 @@ async function main() {
 				// L[3000] data (local)
 				soc.on('data', async (data) => {
 					try {
-						console.log(getNow(), port, COLOR_MAGENTA + serverName, 'data:', serviceName, 'L[3000] ' + connectionId + COLOR_RESET);
+						log.trace(getNow(), port, COLOR_MAGENTA + serverName, 'data:', serviceName, 'L[3000] ' + connectionId + COLOR_RESET);
 						// L[3010]
 						const res = await rpc(port, 'POST', 'snd1',
 							{ x: 'L[3010]', serverName, port, serviceName, connectionId, localSeqNo: locConn.localSeqNo++ }, data);
 						if (res.status !== '200 OK')
-							console.log(getNow(), port, serverName, serviceName, ...redError('conn.snd1.sts: ' + res.status));
+							log.warn(getNow(), port, serverName, serviceName, ...redError('conn.snd1.sts: ' + res.status));
 					} catch (err) {
 						release('soc.data.snd1.err:', ...redError(err));
 					}
 				});
 				soc.on('error', async (err) => {
 					try {
-						console.log(getNow(), port, ...redError(serverName + ' err1: ' + serviceName + ' L[soc.err]:'), ...redError(err));
+						log.warn(getNow(), port, ...redError(serverName + ' err1: ' + serviceName + ' L[soc.err]:'), ...redError(err));
 						// L[err.xxxx]
 						const res = await rpc(port, 'GET', 'end1',
 							{ x: 'L[err.xxxx]', serverName, port, serviceName, connectionId, localSeqNo: locConn.localSeqNo++ });
 						if (res.status !== '200 OK')
-							console.log(getNow(), port, serverName, serviceName, ...redError('soc.err.end.sts: ' + res.status));
+							log.warn(getNow(), port, serverName, serviceName, ...redError('soc.err.end.sts: ' + res.status));
 						release('soc.err:', ...redError(err), connectionId);
 					} catch (err) {
 						release('soc.err.err:', ...redError(err), connectionId);
@@ -116,12 +120,12 @@ async function main() {
 				});
 				soc.on('end', async () => {
 					try {
-						console.log(getNow(), port, COLOR_MAGENTA + serverName, 'end1:', serviceName, connectionId + COLOR_RESET);
+						log.warn(getNow(), port, COLOR_MAGENTA + serverName, 'end1:', serviceName, connectionId + COLOR_RESET);
 						// L[end1.xxxx]
 						const res = await rpc(port, 'GET', 'end1',
 							{ x: 'L[end1.xxxx]', serverName, port, serviceName, connectionId, localSeqNo: locConn.localSeqNo++ });
 						if (res.status !== '200 OK')
-							console.log(getNow(), port, serverName, 'end1:', serviceName, ...redError('end1.sts: ' + res.status));
+							log.warn(getNow(), port, serverName, 'end1:', serviceName, ...redError('end1.sts: ' + res.status));
 						release('soc.end:', connectionId);
 					} catch (err) {
 						release('soc.end.err:', ...redError(err), connectionId);
@@ -132,15 +136,15 @@ async function main() {
 			};
 			function release(...args) {
 				const locConn = localConnections.get(connectionId);
-				console.log(getNow(), port, COLOR_MAGENTA + serverName, 'rels:', serviceName, '[release]', ...args, COLOR_RESET);
-				locConn && locConn.endLocal();
+				log.warn(getNow(), port, COLOR_MAGENTA + serverName, 'rels:', serviceName, '[release]', ...args, COLOR_RESET);
+				locConn && locConn.endLocal(locConn.remoteSeqNo);
 				localConnections.delete(connectionId);
 			}
 		});
 		server.on('error', err => // L[1090] server.error
-			console.log(getNow(), port, serverName, 'svrx:', serviceName, 'L[1090] svr.err:', ...redError(err)));
+			log.trace(getNow(), port, serverName, 'svrx:', serviceName, 'L[1090] svr.err:', ...redError(err)));
 		server.listen(port, () => // L[1020] server.listen
-			console.log(getNow(), port, serverName, 'svrx:', serviceName, 'L[1020] svr.listen'));
+			log.trace(getNow(), port, serverName, 'svrx:', serviceName, 'L[1020] svr.listen'));
 	});
 
 	await sleep(1000);
@@ -160,34 +164,34 @@ async function main() {
 						{ x: 'X[0100]', serverName, serverId, remoteServiceList });
 					const dt = getNow();
 					if (res.status !== '200 OK')
-						console.log(dt, threadId, localServerName, 'X[0100] recv.status:', res.status);
+						log.warn(dt, threadId, localServerName, 'X[0100] recv.status:', res.status);
 					const cmd = res.command;
 					const { serviceName, connectionId } = res.options;
 					const remConn = remoteConnections.get(connectionId);
 					const svc = envConfig.remoteServices[serviceName];
-					console.log(dt, threadId, COLOR_CYAN + localServerName, // 'recv:',
+					log.trace(dt, threadId, COLOR_CYAN + localServerName, // 'recv:',
 						cmd + ':', myStringify(res.options) + COLOR_RESET);
 
 					if (cmd === 'conn') { // R[2110] conn
-						// console.log(dt, threadId, localServerName, ...redError('[2110] conn: ' + svc));
+						// log.trace(dt, threadId, localServerName, ...redError('[2110] conn: ' + svc));
 						if (!svc) throw new Error('serviceName not found: eh!?');
 						const { host, port } = svc;
 						const { serverName, serverId } = res.options;
-						console.log(dt, threadId, localServerName, 'conn: from:', serverName, serverId,
+						log.trace(dt, threadId, localServerName, 'conn: from:', serverName, serverId,
 							'to:', serviceName, connectionId);
 						if (remConn) throw new Error('connectionId: eh!? already connected!?');
 						// R[2120] conn
 						const soc = net.connect({ host, port }, async () => {
-							// console.log(dt, threadId, localServerName, ...redError('[2200] con1: ' + svc));
+							// log.trace(dt, threadId, localServerName, ...redError('[2200] con1: ' + svc));
 							// R[2200] con1
 							try {
 								const res = await rpc(threadId, 'GET', 'con1',
 									{ x: 'R[2200]', serverName, serverId, serviceName, connectionId });
 								if (res.status !== '200 OK')
-									console.log(dt, threadId, localServerName, ...redError('R[2200] con1.sts: ' + res.status));
+									log.warn(dt, threadId, localServerName, ...redError('R[2200] con1.sts: ' + res.status));
 							} catch (err) {
 								// TODO
-								console.log(dt, threadId, localServerName, 'R[2200] con1.err: ', ...redError(err));
+								log.warn(dt, threadId, localServerName, 'R[2200] con1.err: ', ...redError(err));
 							}
 						});
 						// R[2130] conn
@@ -207,12 +211,12 @@ async function main() {
 							writeRemote(locSeqNo, data, onErr) {
 								this.sends[locSeqNo] = () => {
 									this.socket.write(data, onErr);
-									console.log(getNow(), threadId, localServerName, 'werm:', connectionId, 'locSeqNo:', locSeqNo, 'writeRemote');
+									log.trace(getNow(), threadId, 'wrrm:', localServerName, connectionId, 'locSeqNo:', locSeqNo, 'writeRemote');
 								};
 								this.flushRemote();
 							},
 							endRemote(locSeqNo) {
-								console.log(getNow(), threadId, localServerName, 'edrm:', connectionId, 'locSeqNo:', locSeqNo, 'endRemote', !!this.socket);
+								log.trace(getNow(), threadId, 'edrm:', localServerName, connectionId, 'locSeqNo:', locSeqNo, 'endRemote', !!this.socket);
 								if (this.socket) this.socket.end();
 								// @ts-ignore
 								this.socket = null;
@@ -223,22 +227,22 @@ async function main() {
 								const res = await rpc(threadId, 'POST', 'snd6',
 									{ x: 'R[3200]', serverName, serverId, serviceName, connectionId, remoteSeqNo: remoteConnections.get(connectionId).remoteSeqNo++ }, data);
 								if (res.status !== '200 OK')
-									console.log(dt, threadId, ...redError(localServerName + ' snd6: R[3200] sts: ' + res.status));
+									log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] sts: ' + res.status));
 							} catch (err) {
 								// TODO
-								console.log(dt, threadId, ...redError(localServerName + ' snd6: R[3200] err: '), ...redError(err));
+								log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] err: '), ...redError(err));
 							}
 						});
 						soc.on('error', async (err) => { // R[err6] err6.xxxx R[xxxx]
-							console.log(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId), ...redError(err));
+							log.warn(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId), ...redError(err));
 							try {
 								const res = await rpc(threadId, 'GET', 'end6',
 									{ x: 'R[err6]', serverName, serverId, serviceName, connectionId, remoteSeqNo: remoteConnections.get(connectionId).remoteSeqNo++ });
 								if (res.status !== '200 OK')
-									console.log(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId + ' sts: ' + res.status));
+									log.warn(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId + ' sts: ' + res.status));
 							} catch (err) {
 								// TODO
-								console.log(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId + ' err:'), ...redError(err));
+								log.warn(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId + ' err:'), ...redError(err));
 							}
 						});
 						soc.on('end', async () => { // R[end6.xxxx] end6 R[xxxx]
@@ -246,21 +250,21 @@ async function main() {
 								const res = await rpc(threadId, 'GET', 'end6',
 									{ x: 'R[end6.xxxx]', serverName, serverId, serviceName, connectionId, remoteSeqNo: remoteConnections.get(connectionId).remoteSeqNo++ });
 								if (res.status !== '200 OK')
-									console.log(dt, threadId, ...redError(localServerName + ' end6: sts: ' + res.status));
+									log.warn(dt, threadId, ...redError(localServerName + ' end6: sts: ' + res.status));
 							} catch (err) {
 								// TODO
-								console.log(dt, threadId, ...redError(localServerName + 'end6: err:'), ...redError(err));
+								log.warn(dt, threadId, ...redError(localServerName + 'end6: err:'), ...redError(err));
 							}
 						});
 					}
 					else if (cmd === 'con3') { // L[2230.xxxx] con3
 						const locConn = localConnections.get(connectionId);
-						console.log(dt, threadId, localServerName, 'con3:', connectionId);
+						log.trace(dt, threadId, localServerName, 'con3:', connectionId);
 						if (locConn.status !== 'connecting') throw new Error('eh!? L[2230] con1: status != connecting');
 						locConn.status = 'connected';
 					}
 					else if (cmd === 'init') { // X[0140] init
-						console.log(dt, threadId, COLOR_CYAN + localServerName, 'init: X[0140]',
+						log.trace(dt, threadId, COLOR_CYAN + localServerName, 'init: X[0140]',
 							myStringify(res.options) + COLOR_RESET);
 					}
 					else if (cmd === 'snd1') { // R[3040] snd1 (local -> remote)
@@ -268,15 +272,15 @@ async function main() {
 						const { localSeqNo } = res.options;
 						try {
 							if (!remConn || !remConn.socket) {
-								console.log(dt, threadId, localServerName, ...redError('snd4: R[3040] snd1.err:'), ...redError('remConn.socket is null'));
+								log.warn(dt, threadId, localServerName, ...redError('snd4: R[3040] snd1.err:'), ...redError('remConn.socket is null'));
 								try {
 									const res1 = await rpc(threadId, 'GET', 'end6',
 										{ x: 'R[end6.zzzz]', serverName, serverId, serviceName, connectionId });
 									if (res1.status !== '200 OK')
-										console.log(dt, threadId, ...redError(localServerName + ' end6: zzzz sts: ' + res1.status));
+										log.warn(dt, threadId, ...redError(localServerName + ' end6: zzzz sts: ' + res1.status));
 								} catch (err) {
 									// TODO
-									console.log(dt, threadId, ...redError(localServerName + 'end6: zzzz err:'), ...redError(err));
+									log.warn(dt, threadId, ...redError(localServerName + 'end6: zzzz err:'), ...redError(err));
 								}
 							}
 							else {
@@ -287,20 +291,20 @@ async function main() {
 									// 	err => err && console.log(dt, threadId, localServerName, ...redError('snd4: R[3041] snd1.err:'), ...redError(err)));
 								} catch (err) {
 									if (err.code === 'EPIPE')
-										console.log(dt, threadId, localServerName, ...redError('snd4: R[3042] snd1.err: ' + err));
+										log.warn(dt, threadId, localServerName, ...redError('snd4: R[3042] snd1.err: ' + err));
 									else
-										console.log(dt, threadId, localServerName, ...redError('snd4: R[3043] snd1.err:'),
+										log.warn(dt, threadId, localServerName, ...redError('snd4: R[3043] snd1.err:'),
 											...redError(err));
 									// TODO
-									remConn.endRemote();
+									remConn.endRemote(remConn.localSeqNo);
 									try {
 										const res = await rpc(threadId, 'GET', 'end6',
 											{ x: 'R[end6.yyyy]', serverName, serverId, serviceName, connectionId });
 										if (res.status !== '200 OK')
-											console.log(dt, threadId, ...redError(localServerName + ' end6: yyyy sts: ' + res.status));
+											log.warn(dt, threadId, ...redError(localServerName + ' end6: yyyy sts: ' + res.status));
 									} catch (err) {
 										// TODO
-										console.log(dt, threadId, ...redError(localServerName + 'end6: yyyy err:'), ...redError(err));
+										log.warn(dt, threadId, ...redError(localServerName + 'end6: yyyy err:'), ...redError(err));
 									}
 								}
 							}
@@ -309,10 +313,10 @@ async function main() {
 							const res = await rpc(threadId, 'GET', 'snd2',
 								{ x: 'R[3050]', serverName, serverId, serviceName, connectionId });
 							if (res.status !== '200 OK')
-								console.log(dt, threadId, localServerName, ...redError('snd2: R[3050] snd2.sts: ' + res.status));
+								log.warn(dt, threadId, localServerName, ...redError('snd2: R[3050] snd2.sts: ' + res.status));
 						} catch (err) {
 							// TODO
-							console.log(dt, threadId, localServerName, ...redError('snd2: R[3050] snd2.err:'), ...redError(err));
+							log.warn(dt, threadId, localServerName, ...redError('snd2: R[3050] snd2.err:'), ...redError(err));
 						}
 					}
 					else if (cmd === 'snd6') { // L[3230] snd6 (remote -> local)
@@ -320,28 +324,27 @@ async function main() {
 						const locConn = localConnections.get(connectionId);
 						if (locConn && locConn.socket)
 							locConn.writeLocal(remoteSeqNo, res.body,
-								err => err && console.log(dt, threadId, localServerName, 'snd8:', connectionId, 'L[3230]', ...redError(err)));
-						// locConn.socket.write(res.body,
-						// 	err => err && console.log(dt, threadId, localServerName, 'snd8:', connectionId, 'L[3230]', ...redError(err)));
+								err => err && log.warn(dt, threadId, localServerName, 'snd8:', connectionId, 'L[3230]', ...redError(err)));
 						else
-							console.log(dt, threadId, localServerName, 'snd8:', connectionId, 'L[3230]', ...redError('locConn.socket is null'));
-						// TODO
+							log.warn(dt, threadId, localServerName, 'snd8:', connectionId, 'L[3230]', ...redError('locConn.socket is null'));
 					}
 					else if (cmd === 'end1') { // R[end1.xxxx] end1
-						remConn && remConn.endRemote() ||
-							console.log(dt, threadId, COLOR_MAGENTA + localServerName, 'end1:', connectionId, 'remConn.socket closed' + COLOR_RESET);
+						const { localSeqNo } = res.options;
+						remConn && remConn.endRemote(localSeqNo) ||
+							log.warn(dt, threadId, COLOR_MAGENTA + localServerName, 'end1:', connectionId, 'remConn.socket closed' + COLOR_RESET);
 					}
 					else if (cmd === 'end6') { // R[end6.xxxx] end6
 						const locConn = localConnections.get(connectionId);
-						locConn && locConn.endLocal() ||
-							console.log(dt, threadId, COLOR_MAGENTA + localServerName, 'end6:', connectionId, 'locConn.socket closed' + COLOR_RESET);
+						const { remoteSeqNo } = res.options;
+						locConn && locConn.endLocal(remoteSeqNo) ||
+							log.warn(dt, threadId, COLOR_MAGENTA + localServerName, 'end6:', connectionId, 'locConn.socket closed' + COLOR_RESET);
 					}
 					else if (cmd === 'disc') { // X[0190] disc disconnect
 						// TODO
-						console.log(getNow(), threadId, ...redError('disc'));
+						log.error(getNow(), threadId, ...redError('disc'));
 					}
 					else {
-						console.log(dt, threadId, ...redError(localServerName + ' recv: cmd.err: \"' + cmd + '\"'));
+						log.fatal(dt, threadId, ...redError(localServerName + ' recv: cmd.err: \"' + cmd + '\"'));
 						throw new Error('cmd: ' + cmd + ' eh!?');
 					}
 					waitSeconds = 0;
@@ -350,7 +353,7 @@ async function main() {
 					waitSeconds = Math.floor(10 * (waitSeconds * 1.2 + 1)) / 10;
 					if (waitSeconds > 10) waitSeconds = 10;
 					const ws = Number((waitSeconds * (1 + i / 10)).toFixed(3));
-					console.log(getNow(), threadId, ...redError(localServerName + ' recv: err:'),
+					log.warn(getNow(), threadId, ...redError(localServerName + ' recv: err:'),
 						...redError(err), 'wait:', ws, 'sec');
 
 					await sleep(200 + ws * 1000);
@@ -369,11 +372,11 @@ async function main() {
 	 * @returns any {status, options, body}
 	 */
 	async function rpc(num, method, cmd, args, body = null) {
-		console.log(getNow(), num, COLOR_GREEN + localServerName, cmd + ': ' + myStringify(args) + COLOR_RESET);
+		log.trace(getNow(), num, COLOR_GREEN + localServerName, cmd + ': ' + myStringify(args) + COLOR_RESET);
 		if (body && method !== 'POST')
-			console.log(getNow(), num, ...redError(method + ' method has body'));
+			log.error(getNow(), num, ...redError(method + ' method has body'));
 		else if (!body && method !== 'GET')
-			console.log(getNow(), num, ...redError(method + ' method does not have body'));
+			log.error(getNow(), num, ...redError(method + ' method does not have body'));
 		if (body) convertBuffer(body);
 		const res = await httpRequest({
 			method, body, targetURL, proxyURL,
@@ -384,8 +387,8 @@ async function main() {
 		});
 		// const dt = getNow();
 		// for (let i = 0; i < res.rawHeaders.length; i += 2)
-		// 	console.log(dt, num, localServerName, 'rpc.res', COLOR_CYAN + res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + COLOR_RESET);
-		// console.log(dt, num, localServerName, 'rpc.res', COLOR_CYAN + 'body [' + res.body.toString() + ']' + COLOR_RESET);
+		// 	log.trace(dt, num, localServerName, 'rpc.res', COLOR_CYAN + res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + COLOR_RESET);
+		// log.trace(dt, num, localServerName, 'rpc.res', COLOR_CYAN + 'body [' + res.body.toString() + ']' + COLOR_RESET);
 
 		if (res.body && res.body.length > 0) convertBuffer(res.body);
 		const options = res.headers[xRelayOptions];
@@ -412,4 +415,30 @@ function sleep(msec) {
 function convertBuffer(data) {
 	for (let i = 0; i < data.length; ++i)
 		data[i] = data[i] ^ envConfig.xRelayCode;
+}
+
+// log
+function log(...args) {
+	const msg = args.reduce((prev, curr) => {
+		prev += ' ' + String(curr);
+		return prev;
+	}, '').substring(1);
+	console.log(msg);
+}
+
+// logInit
+function logInit() {
+	// @ts-ignore
+	log.trace = noop;
+	// @ts-ignore
+	log.info = noop;
+	// @ts-ignore
+	log.debug = noop;
+	// @ts-ignore
+	log.warn = log;
+	// @ts-ignore
+	log.error = log;
+	// @ts-ignore
+	log.fatal = log;
+	function noop() {}
 }

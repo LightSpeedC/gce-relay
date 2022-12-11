@@ -55,11 +55,19 @@ const servers = new Map();
 // connections
 // const connections = new Map();
 
+/**
+ * relay
+ * @param {*} req request
+ * @param {*} res response
+ * @param {*} log logger function
+ * @param {string} dt Date and Time string
+ * @returns 
+ */
 async function relay(req, res, log, dt) {
 	const relayCommand = req.headers[xRelayCommand] || '';
 	const relayOptions = req.headers[xRelayOptions] ?
 		JSON.parse(req.headers[xRelayOptions]) : {};
-	log(dt, '##' + COLOR_GREEN, relayCommand + ':', myStringify(relayOptions) + COLOR_RESET);
+	log.trace(dt, '##' + COLOR_GREEN, relayCommand + ':', myStringify(relayOptions) + COLOR_RESET);
 
 	const data = await stream2buffer(req);
 
@@ -71,9 +79,9 @@ async function relay(req, res, log, dt) {
 			[xRelayCommand]: cmd,
 			[xRelayOptions]: JSON.stringify(args),
 		});
-		body && res.write(body, err => err && log(dt, '@@', ...redError(err)));
+		body && res.write(body, err => err && log.warn(dt, '@@', ...redError(err)));
 		res.end();
-		log(getNow() + '.' + dt.substr(-4), '@@' + (sts === '200 OK' ? COLOR_CYAN : COLOR_RED_BOLD + ' ' + sts),
+		log.trace(getNow() + '.' + dt.substr(-4), '@@' + COLOR_CYAN,
 			cmd + ':', myStringify(args) + COLOR_RESET);
 	}
 
@@ -85,10 +93,9 @@ async function relay(req, res, log, dt) {
 			[xRelayCommand]: cmd,
 			[xRelayOptions]: JSON.stringify(args),
 		});
-		body && res.write(body, err => err && log(dt, '@@', ...redError(err)));
+		body && res.write(body, err => err && log.warn(dt, '@@', ...redError(err)));
 		res.end();
-		log(dt, '@@' + COLOR_RED_BOLD, sts, cmd,
-			myStringify(args) + COLOR_RESET);
+		log.warn(dt, '@@' + COLOR_RED_BOLD, sts, cmd + ':', myStringify(args) + COLOR_RESET);
 	}
 
 	switch (relayCommand) {
@@ -98,7 +105,7 @@ async function relay(req, res, log, dt) {
 				let svr = servers.get(serverName);
 				if (svr && svr.serverId !== serverId) {
 					// TODO release or dealloc
-					console.log(dt, '***RELOAD***', serverName, serverId, '<-', svr.serverId);
+					log.error(dt, '***RELOAD***', serverName, serverId, '<-', svr.serverId);
 
 					// 不要な受信を返す(受信していないと思うけど)
 					while (true) {
@@ -166,7 +173,7 @@ async function relay(req, res, log, dt) {
 					throw new Error('eh!? server not found');
 				}
 				// if (svr.serverId === serverId) throw new Error('eh!?');
-				console.log('locSvr.serverId:', locSvr.serverId, 'serverId:', serverId);
+				log.trace('locSvr.serverId:', locSvr.serverId, 'serverId:', serverId);
 				let remoteServerName = '';
 				servers.forEach((remSvr, svrNm) => {
 					if (remSvr.remoteServices[serviceName]) {
@@ -187,8 +194,8 @@ async function relay(req, res, log, dt) {
 						// resNG('conn.err', { serverName, serverId, serviceName, connectionId, message: 'no buffers' });
 						return; // 'conn.err eh!? no buffers'
 					}
-					// console.log(COLOR_RED_BOLD, { serverName, serverId, serviceName, connectionId }, COLOR_RESET);
-					// console.log(COLOR_RED_BOLD, remSvr, COLOR_RESET);
+					// log.trace(COLOR_RED_BOLD, { serverName, serverId, serviceName, connectionId }, COLOR_RESET);
+					// log.trace(COLOR_RED_BOLD, remSvr, COLOR_RESET);
 					func.resOK('conn', { x: 'C[2100]', serverName, serverId, serviceName, connectionId });
 					resOK('con2', { x: 'C[2020]', connectionId });
 				}
@@ -232,7 +239,7 @@ async function relay(req, res, log, dt) {
 				}
 				let remoteServerName = '';
 				servers.forEach((svr, svrNm) => {
-					// console.log(COLOR_GREEN, svrNm, svr, COLOR_RESET);
+					// log.trace(COLOR_GREEN, svrNm, svr, COLOR_RESET);
 					if (svr.remoteServices[serviceName]) {
 						remoteServerName = svrNm;
 					}
