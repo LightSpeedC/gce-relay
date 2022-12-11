@@ -47,7 +47,7 @@ async function main() {
 		// L[1010]
 		const { port, serviceName } = x;
 		const server = net.createServer({
-			//allowHalfOpen: true,
+			allowHalfOpen: true,
 		}, async (soc) => {
 			// L[1030]
 			const connectionId = uniqId('ConnId');
@@ -236,11 +236,41 @@ async function main() {
 					else if (cmd === 'snd1') { // R[3040] snd1 (local -> remote)
 						const body1 = res.body;
 						try {
-							if (!remConn || !remConn.socket)
+							if (!remConn || !remConn.socket) {
 								console.log(dt, threadId, localServerName, ...redError('snd4: R[3040] snd1.err:'), ...redError('remConn.socket is null'));
-							else
-								remConn.socket.write(body1,
-									err => err && console.log(dt, threadId, localServerName, ...redError('snd4: R[3040] snd1.err:'), ...redError(err)));
+								try {
+									const res = await rpc(threadId, 'GET', 'end6',
+										{ x: 'R[end6.zzzz]', serverName, serverId, serviceName, connectionId });
+									if (res.status !== '200 OK')
+										console.log(dt, threadId, ...redError(localServerName + ' end6: zzzz sts: ' + res.status));
+								} catch (err) {
+									// TODO
+									console.log(dt, threadId, ...redError(localServerName + 'end6: zzzz err:'), ...redError(err));
+								}
+							}
+							else {
+								try {
+									remConn.socket.write(body1,
+										err => err && console.log(dt, threadId, localServerName, ...redError('snd4: R[3041] snd1.err:'), ...redError(err)));
+								} catch (err) {
+									if (err.code === 'EPIPE')
+										console.log(dt, threadId, localServerName, ...redError('snd4: R[3042] snd1.err: ' + err));
+									else
+										console.log(dt, threadId, localServerName, ...redError('snd4: R[3043] snd1.err:'),
+											...redError(err));
+									// TODO
+									remConn.end();
+									try {
+										const res = await rpc(threadId, 'GET', 'end6',
+											{ x: 'R[end6.yyyy]', serverName, serverId, serviceName, connectionId });
+										if (res.status !== '200 OK')
+											console.log(dt, threadId, ...redError(localServerName + ' end6: yyyy sts: ' + res.status));
+									} catch (err) {
+										// TODO
+										console.log(dt, threadId, ...redError(localServerName + 'end6: yyyy err:'), ...redError(err));
+									}
+								}
+							}
 
 							// R[3050]
 							const res = await rpc(threadId, 'GET', 'snd2',
