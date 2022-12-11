@@ -40,7 +40,9 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
   cliReq.pipe(svrReq);
   svrReq.on('error', function onSvrReqErr(err) {
     cliRes.writeHead(400, err.message, {'content-type': 'text/html'});
-    cliRes.end('<h1>' + err.message + '<br/>' + cliReq.url + '</h1>');
+    cliRes.write('<h1>' + err.message + '<br/>' + cliReq.url + '</h1>',
+      err => onErr(err, 'svrReqErr', x.hostname + ':' + (x.port || 80), svrSoc));
+    cliRes.end();
     onErr(err, 'svrReq', x.hostname + ':' + (x.port || 80), svrSoc);
   });
 })
@@ -56,9 +58,12 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
     svrReq.end();
     svrReq.on('connect', function onSvrConn(svrRes, svrSoc2, svrHead) {
       svrSoc = svrSoc2;
-      cliSoc.write('HTTP/1.0 200 Connection established\r\n\r\n');
-      if (cliHead && cliHead.length) svrSoc.write(cliHead);
-      if (svrHead && svrHead.length) cliSoc.write(svrHead);
+      cliSoc.write('HTTP/1.0 200 Connection established\r\n\r\n',
+        err => onErr(err, 'cliSocY', cliReq.url, svrSoc));
+      if (cliHead && cliHead.length) svrSoc.write(cliHead,
+        err => onErr(err, 'svrSocX', cliReq.url, cliSoc));
+      if (svrHead && svrHead.length) cliSoc.write(svrHead,
+        err => onErr(err, 'cliSocX', cliReq.url, svrSoc));
       svrSoc.pipe(cliSoc);
       cliSoc.pipe(svrSoc);
       svrSoc.on('error', err => onErr(err, 'svrSoc', cliReq.url, cliSoc));
@@ -69,8 +74,10 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
     svrSoc = net.connect(Number(x.port || 443),
         x.hostname || undefined,
         function onSvrConn() {
-      cliSoc.write('HTTP/1.0 200 Connection established\r\n\r\n');
-      if (cliHead && cliHead.length) svrSoc.write(cliHead);
+      cliSoc.write('HTTP/1.0 200 Connection established\r\n\r\n',
+        err => onErr(err, 'cliSocZ', cliReq.url, svrSoc));
+      if (cliHead && cliHead.length) svrSoc.write(cliHead,
+        err => onErr(err, 'svrSoc', cliReq.url, cliSoc));
       cliSoc.pipe(svrSoc);
     });
     svrSoc.pipe(cliSoc);
@@ -89,6 +96,7 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
     (PROXY_URL ? ' -> ' + PROXY_HOST + ':' + PROXY_PORT : '')));
 
 function onErr(err, msg, url, soc) {
+  if (!err) return;
   if (soc) soc.end();
   console.log('%s %s: %s', new Date().toLocaleTimeString(), msg, url, err + '');
 }

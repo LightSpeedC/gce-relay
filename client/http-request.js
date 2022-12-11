@@ -60,8 +60,8 @@ function httpRequest({ method, headers, body, targetURL, proxyURL }) {
 		});
 
 		req.on('error', reject);
-		// if (body) req.write(body);
-		req.end(body);
+		if (body) req.write(body, err => err && reject(err));
+		req.end();
 
 	});
 

@@ -8,17 +8,22 @@ module.exports = getAccept;
 
 // log(dt, '# Accept:', getAccept(dt, req.headers.accept || ''));
 
-// getAccept
-function getAccept(dt, acc = '') {
+/**
+ * getAccept
+ * @param {string} dt Date and Time string
+ * @param {string} accept Accept: string
+ * @returns 
+ */
+function getAccept(dt, accept = '') {
 	try {
-		const obj = acc.split(',').reduce((prev, curr) => {
+		const accepts = accept.split(',').reduce((prev, curr) => {
 			const [key, rest] = curr.split('/');
 			if (!prev[key]) prev[key] = [];
 			prev[key].push(rest);
 			return prev;
 		}, {});
-		return Object.keys(obj).map(key => {
-			return key + '/' + '(' + obj[key].join(',') + ')';
+		return Object.keys(accepts).map(key => {
+			return key + '/' + '(' + accepts[key].join(',') + ')';
 		}).join('| ');
 	} catch (err) {
 		console.log(dt, err + os.EOL + err.stack);

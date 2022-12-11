@@ -32,6 +32,8 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 		} : {};
 		const headers = Object.assign({ Host: PARSE_TARGET_URL.host }, auth);
 
+		const onErr = err => err && reject(err);
+
 		const req = http.request({
 			hostname: PARSE_PROXY_URL.hostname,
 			port: PARSE_PROXY_URL.port,
@@ -40,8 +42,8 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 			headers,
 		}, res => {
 			for (let i = 0; i < res.rawHeaders.length; i += 2)
-				writeStream.write(res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + CRLF);
-			writeStream.write(CRLF);
+				writeStream.write(res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + CRLF, onErr);
+			writeStream.write(CRLF, onErr);
 			res.pipe(writeStream, { end: false });
 			res.on('end', resolve);
 		});

@@ -9,7 +9,11 @@ const COLOR_RED_BOLD = '\x1b[31;1m';
 
 module.exports = relay;
 
-const DateTime = require('date-time-string');
+const getNow = require('../lib/get-now');
+const myStringify = require('../lib/my-stringify');
+const redError = require('../lib/red-error');
+const stream2buffer = require('../lib/stream2buffer');
+
 /*
 relayOptions: {
 	serverName
@@ -27,11 +31,9 @@ localSeqNoは0から
 command
 	new
 	end
-	send
+	snd1
 	recv
 */
-
-const stream2buffer = require('../lib/stream2buffer');
 
 const envConfig = require('./env-config');
 const { xRelayCommand, xRelayOptions, xRelayStatus } = envConfig;
@@ -57,8 +59,7 @@ async function relay(req, res, log, dt) {
 	const relayCommand = req.headers[xRelayCommand] || '';
 	const relayOptions = req.headers[xRelayOptions] ?
 		JSON.parse(req.headers[xRelayOptions]) : {};
-	log(dt, '##' + COLOR_GREEN, relayCommand,
-		JSON.stringify(relayOptions).replace(/\"/g, '').replace(/,/g, ', ') + COLOR_RESET);
+	log(dt, '##' + COLOR_GREEN, relayCommand + ':', myStringify(relayOptions) + COLOR_RESET);
 
 	const data = await stream2buffer(req);
 
@@ -70,9 +71,10 @@ async function relay(req, res, log, dt) {
 			[xRelayCommand]: cmd,
 			[xRelayOptions]: JSON.stringify(args),
 		});
-		res.end(body);
-		log(getNow() + '.' + dt.substr(-4), '@@' + COLOR_CYAN, sts, cmd,
-			JSON.stringify(args).replace(/\"/g, '').replace(/,/g, ', ') + COLOR_RESET);
+		body && res.write(body, err => err && log(dt, '@@', ...redError(err)));
+		res.end();
+		log(getNow() + '.' + dt.substr(-4), '@@' + (sts === '200 OK' ? COLOR_CYAN : COLOR_RED_BOLD + ' ' + sts),
+			cmd + ':', myStringify(args) + COLOR_RESET);
 	}
 
 	function resNG(cmd, args, body = undefined) {
@@ -83,9 +85,10 @@ async function relay(req, res, log, dt) {
 			[xRelayCommand]: cmd,
 			[xRelayOptions]: JSON.stringify(args),
 		});
-		res.end(body);
+		body && res.write(body, err => err && log(dt, '@@', ...redError(err)));
+		res.end();
 		log(dt, '@@' + COLOR_RED_BOLD, sts, cmd,
-			JSON.stringify(args).replace(/\"/g, '').replace(/,/g, ', ') + COLOR_RESET);
+			myStringify(args) + COLOR_RESET);
 	}
 
 	switch (relayCommand) {
@@ -97,11 +100,12 @@ async function relay(req, res, log, dt) {
 					// TODO release or dealloc
 					console.log(dt, '***RELOAD***', serverName, serverId, '<-', svr.serverId);
 
+					// 不要な受信を返す(受信していないと思うけど)
 					while (true) {
 						const func = svr.recvs.shift();
 						if (!func) break;
-						// C[0180] disconnect
-						func.resNG('disconnect', { x: '[discon]', serverName, serverId, remoteServiceList });
+						// C[0180] disc disconnect
+						func.resNG('disc', { x: 'C[0180.discon]', serverName, serverId, remoteServiceList });
 					}
 
 					servers.delete(serverName);
@@ -109,6 +113,7 @@ async function relay(req, res, log, dt) {
 				}
 				if (svr) {
 					svr.recvs.push({ resOK, resNG });
+					if (svr.sends.length) svr.sends.shift()();
 				}
 				else {
 					servers.set(serverName, {
@@ -174,14 +179,18 @@ async function relay(req, res, log, dt) {
 					const remSvr = servers.get(remoteServerName);
 					const func = remSvr.recvs.shift();
 					if (!func) {
-						resNG('conn.err', { serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-						throw new Error('conn.err eh!? no buffers');
+						remSvr.sends.push(() => {
+							const func = remSvr.recvs.shift();
+							func.resOK('conn', { x: 'C[2100]', serverName, serverId, serviceName, connectionId });
+							resOK('con2', { x: 'C[2020]', connectionId });
+						});
+						// resNG('conn.err', { serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+						return; // 'conn.err eh!? no buffers'
 					}
 					// console.log(COLOR_RED_BOLD, { serverName, serverId, serviceName, connectionId }, COLOR_RESET);
-					// console.log(COLOR_RED_BOLD, obj, COLOR_RESET);
+					// console.log(COLOR_RED_BOLD, remSvr, COLOR_RESET);
 					func.resOK('conn', { x: 'C[2100]', serverName, serverId, serviceName, connectionId });
-					// C[2020]
-					resOK('conn.ok1', { x: 'C[2020]', connectionId });
+					resOK('con2', { x: 'C[2020]', connectionId });
 				}
 				else {
 					resNG('conn.err', { x: 'C[2105]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
@@ -189,32 +198,37 @@ async function relay(req, res, log, dt) {
 				}
 			}
 			return;
-		case 'conn.ok': // C[2210] conn.ok resOK
+		case 'con1': // C[2210] con1 resOK
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
 				const locSvr = servers.get(serverName);
 				if (!locSvr) {
-					resNG('conn.ok.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
-					throw new Error('conn.ok.err eh!? server not found');
+					resNG('con1.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+					throw new Error('con1.err eh!? server not found');
 				}
 
 				const func = locSvr.recvs.shift();
 				if (!func) {
-					resNG('conn.ok.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-					throw new Error('conn.ok.err eh!? no buffers');
+					locSvr.sends.push(() => {
+						const func = locSvr.recvs.shift();
+						func.resOK('con3', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
+						resOK('con4', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
+					});
+					// resNG('con1.err', { x: 'C[2210]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+					return; // 'con1.err eh!? no buffers'
 				}
-				// C[2220] conn.ok
-				func.resOK('conn.ok.ok', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
-				resOK('conn.ok.ok2', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
+				// C[2220] con1
+				func.resOK('con3', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
+				resOK('con4', { x: 'C[2220]', serverName, serverId, serviceName, connectionId });
 			}
 			return;
-		case 'send': // C[3020] send (local svc -> remote svc)
+		case 'snd1': // C[3020] snd1 (local svc -> remote svc)
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
 				const locSvr = servers.get(serverName);
 				if (!locSvr) {
-					resNG('send.err', { x: 'C[3020]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
-					throw new Error('send.err eh!? server not found');
+					resNG('snd1.err', { x: 'C[3020]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+					throw new Error('snd1.err eh!? server not found');
 				}
 				let remoteServerName = '';
 				servers.forEach((svr, svrNm) => {
@@ -224,50 +238,58 @@ async function relay(req, res, log, dt) {
 					}
 				});
 
-				// [3030] send
+				// C[3030] snd1
 				if (remoteServerName) {
 					const remSvr = servers.get(remoteServerName);
 					const func = remSvr.recvs.shift();
 					if (!func) {
-						// remSvr.sends.push(xxx);
-						resNG('send.err', { x: '[3030]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-						throw new Error('send.err eh!? no buffers');
+						remSvr.sends.push(() => {
+							const func = remSvr.recvs.shift();
+							func.resOK('snd1', { x: 'C[3030]', ...relayOptions }, data);
+							resOK('snd2', { x: 'C[3030]', ...relayOptions });
+						});
+						// resNG('snd1.err', { x: 'C[3030]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+						return; // 'snd1.err eh!? no buffers');
 					}
-					func.resOK('send', { x: '[3030]', ...relayOptions }, data);
-					resOK('send.ok', { x: '[3030]', ...relayOptions });
+					func.resOK('snd1', { x: 'C[3030]', ...relayOptions }, data);
+					resOK('snd2', { x: 'C[3030]', ...relayOptions });
 				}
 				else {
-					resNG('send.err', { x: '[3030]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
-					throw new Error('send.err eh!? remote service not found');
+					resNG('snd1.err', { x: '[3030]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
+					throw new Error('snd1.err eh!? remote service not found');
 				}
 			}
 			return;
-		case 'send2': // [3210] send2 (remote svc -> local svc)
+		case 'snd6': // C[3210] snd6 (remote svc -> local svc)
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('send2.err', { x: '[3210.send2.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
-					throw new Error('send2.err eh!? server not found');
+				const svr = servers.get(serverName);
+				if (!svr) {
+					resNG('snd6.err', { x: 'C[3210.snd6.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+					throw new Error('snd6.err eh!? server not found');
 				}
 
-				const func = obj.recvs.shift();
+				const func = svr.recvs.shift();
 				if (!func) {
-					// obj.sends.push(xxx);
-					resNG('send2.err', { x: '[3210.send2.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-					throw new Error('send2.err eh!? no buffers');
+					svr.sends.push(() => {
+						const func = svr.recvs.shift();
+						func.resOK('snd6', { x: 'C[3220]', ...relayOptions }, data);
+						resOK('snd7', { x: 'C[3220]', ...relayOptions });
+					});
+					// resNG('snd6.err', { x: 'C[3210.snd6.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+					return; // 'snd6.err eh!? no buffers'
 				}
-				// [3220]
-				func.resOK('send2', { x: '[3220]', ...relayOptions }, data);
-				resOK('send2.ok', { x: '[3220]', ...relayOptions });
+				// C[3220]
+				func.resOK('snd6', { x: 'C[3220]', ...relayOptions }, data);
+				resOK('snd7', { x: 'C[3220]', ...relayOptions });
 			}
 			return;
-		case 'end': // [xxxx] end
+		case 'end1': // [xxxx] end
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('end.err', { x: '[end.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+				const svr = servers.get(serverName);
+				if (!svr) {
+					resNG('end.err', { x: '[end1.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
 					throw new Error('end.err eh!? server not found');
 				}
 				let remoteServerName = '';
@@ -277,46 +299,54 @@ async function relay(req, res, log, dt) {
 					}
 				});
 
-				// [end.xxxx]
+				// [end1.xxxx]
 				if (remoteServerName) {
-					const obj = servers.get(remoteServerName);
-					const func = obj.recvs.shift();
+					const remSvr = servers.get(remoteServerName);
+					const func = remSvr.recvs.shift();
 					if (!func) {
-						// obj.sends.push(xxx);
-						resNG('end.err', { x: '[end.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-						throw new Error('end.err eh!? no buffers');
+						remSvr.sends.push(() => {
+							const func = remSvr.recvs.shift();
+							func.resOK('end1', { x: '[end1]', ...relayOptions });
+							resOK('end2', { x: '[end1.xxxx]', ...relayOptions });
+						});
+						// resNG('end.err', { x: '[end1.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+						return; // 'end1.err eh!? no buffers'
 					}
-					func.resOK('end', relayOptions);
+					func.resOK('end1', { x: '[end1]', ...relayOptions });
 				}
 				else {
-					resNG('end.err', { x: '[end.xxxx]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
+					resNG('end1.err', { x: '[end1.xxxx]', serverName, serverId, serviceName, connectionId, message: 'remote service not found' });
 					throw new Error('end.err eh!? remote service not found');
 				}
-				resOK('end.ok', { x: '[end.xxxx]', ...relayOptions });
+				resOK('end2', { x: '[end1.xxxx]', ...relayOptions });
 			}
 			return;
-		case 'end2': // [end2.xxxx] end2 (remote svc -> local svc)
+		case 'end6': // [end6.xxxx] end6 (remote svc -> local svc)
 			{
 				const { serverName, serverId, serviceName, connectionId } = relayOptions;
-				const obj = servers.get(serverName);
-				if (!obj) {
-					resNG('end2.err', { x: '[end2.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
-					throw new Error('end2.err eh!? server not found');
+				const svr = servers.get(serverName);
+				if (!svr) {
+					resNG('end6.err', { x: '[end6.xxxx]', serverName, serverId, serviceName, connectionId, message: 'server not found' });
+					throw new Error('end6.err eh!? server not found');
 				}
 
-				const func = obj.recvs.shift();
+				const func = svr.recvs.shift();
 				if (!func) {
-					// obj.sends.push(xxx);
-					resNG('end2.err', { x: '[end2.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
-					throw new Error('end2.err eh!? no buffers');
+					svr.sends.push(() => {
+						const func = svr.recvs.shift();
+						func.resOK('end6', { x: '[end6.xxxx]', ...relayOptions }, data);
+						resOK('end7', { x: '[end6.xxxx]', ...relayOptions });
+					});
+					// resNG('end6.err', { x: '[end6.xxxx]', serverName, serverId, serviceName, connectionId, message: 'no buffers' });
+					return; // 'end6.err eh!? no buffers'
 				}
-				// [end2.xxxx]
-				func.resOK('end2', { x: '[end2.xxxx]', ...relayOptions }, data);
-				resOK('end2.ok', { x: '[end2.xxxx]', ...relayOptions });
+				// [end6.xxxx]
+				func.resOK('end6', { x: '[end6.xxxx]', ...relayOptions }, data);
+				resOK('end7', { x: '[end6.xxxx]', ...relayOptions });
 			}
 			return;
-		case 'send.ok':
-			resOK('send.ok.ok', relayOptions);
+		case 'snd2': // C[3060]
+			resOK('snd3', {x:'C[3060]', ...relayOptions});
 		case 'else':
 			break;
 		default:
@@ -334,9 +364,4 @@ async function relay(req, res, log, dt) {
 	// } = relayOptions;
 
 	resOK(relayCommand, relayOptions);
-}
-
-// getNow
-function getNow(dt = new Date()) {
-	return DateTime.toDateTimeString(dt);
 }

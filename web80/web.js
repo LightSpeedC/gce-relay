@@ -2,17 +2,19 @@
 
 'use strict';
 
-const RELEASE = '2022-12-10 10:54 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-11 09:35 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const DateTime = require('date-time-string');
 const dnsReverse = require('./dns-reverse');
 const dnsResolve = require('./dns-resolve');
 const relay = require('./relay');
 const envConfig = require('./env-config');
+const getNow = require('../lib/get-now');
+const redError = require('../lib/red-error');
+const frequentErrors = require('../lib/frequent-errors');
 
 const PORT = 80;
 const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
@@ -99,6 +101,7 @@ http.createServer((req, res) => {
 	const clientIp = (req.socket.remoteAddress || '').replace('::ffff:', '');
 	const serverIp = req.headers.host || req.socket.localAddress || '';
 	const reqVer = 'HTTP/' + req.httpVersion;
+	let errorOccured = false;
 	processRequest().catch(err => {
 		log(dt, '//', err);
 		log(dt, '//', err.stack);
@@ -118,21 +121,23 @@ http.createServer((req, res) => {
 			const serverIpUrl = serverIp + (reqUrl.startsWith('/') ? '' : ' ') + reqUrl;
 			let info = [clientNames, req.method, serverIpUrl, reqVer].join(' ');
 			logRotate();
-			log(dt, '::', info);
 
 			// relayPath
 			if (reqUrl === envConfig.relayPath &&
 				req.headers[envConfig.xRelayCommand] &&
 				req.headers[envConfig.xRelayOptions]) {
+				if (clientIp !== '::1') log(dt, '::', info);
 				return await relay(req, res, log, dt);
 			}
+			log(dt, '::', info);
 			if (reqUrl === envConfig.relayPath)
 				log(dt, '%%', req.method, reqUrl, 'protocol error');
 
 			// favicon
 			if (req.method === 'GET' && reqUrl === '/favicon.ico') {
 				res.writeHead(200, { 'Content-Type': 'image/png' });
-				res.end(FAVICON);
+				res.write(FAVICON, onErr);
+				res.end();
 				return;
 			}
 
@@ -184,27 +189,67 @@ ${RELEASE}
 </pre>
 `;
 
-			res.write(msg);
-			setTimeout(() => res.write('<br>\nDid you wait for my response?\n'), GENERIC_USER_TIMEOUT);
-			setTimeout(() => res.write('<br>\nReally?\n'), GENERIC_USER_TIMEOUT * 2);
-			setTimeout(() => res.end('<br>\nYou are very patient. :-)\n'), GENERIC_USER_TIMEOUT * 3);
+			res.write(msg, onErr);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nDid you wait for my response?\n', onErr);
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nReally?\n', onErr);
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT * 2);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nYou are very patient. :-)\n', onErr);
+					res.end();
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT * 3);
+
 		} catch (err) {
-			log(dt, err + os.EOL + err.stack);
+			onErr(err);
+		}
+
+		/**
+		 * onErr
+		 * @param {Error | null | undefined | any} err 
+		 */
+		function onErr(err) {
+			if (!err) return;
+			const code = err && err.code || err.message;
+			if (frequentErrors(err))
+				log(dt, '&&', err + '');
+			else
+				log(dt, '&&', err + os.EOL + err.stack);
 			try {
-				res.end('err');
+				res.write('err', err => {
+					if (err) {
+						// @ts-ignore
+						if (code !== (err && err.code || err.message))
+							log(dt, '&&', err + os.EOL + err.stack);
+					}
+				});
+				res.end();
 			}
 			catch (err) {
-				log(dt, err + os.EOL + err.stack);
+				if (frequentErrors(err))
+					log(dt, '&&', err + '');
+				else
+					log(dt, '&&', err + os.EOL + err.stack);
 			}
+			errorOccured = true;
 		}
 	}
-}).listen(PORT, () => log(getNow(), COLOR_GREEN_BOLD +
-	`        port ${PORT}, listening started` + COLOR_RESET));
-
-// getNow
-function getNow(dt = new Date()) {
-	return DateTime.toDateTimeString(dt);
-}
+}).listen(PORT, () => {
+	log(getNow(), COLOR_GREEN_BOLD +
+		`        port ${PORT}, listening started ` + COLOR_RESET + RELEASE);
+}).on('error', err => {
+	log(getNow(), '       ', ...redError(err));
+});
 
 // log
 function log(...args) {
@@ -212,6 +257,14 @@ function log(...args) {
 		prev += ' ' + String(curr);
 		return prev;
 	}, '').substring(1) + os.EOL;
-	stdout.write(msg);
-	w && w.write(msg.replace(COLOR_REGEXP, ''));
+	stdout.write(msg, onErr);
+	w && w.write(msg.replace(COLOR_REGEXP, ''), onErr);
+
+	/**
+	 * onErr
+	 * @param {Error | null | undefined} err 
+	 */
+	function onErr(err) {
+		if (err) console.log(err);
+	}
 }

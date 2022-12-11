@@ -54,7 +54,10 @@ function httpRequest(writeStream, TARGET_URL, PROXY_URL) {
 			'Host: ' + PARSE_TARGET_URL.host,
 			auth + 'Connection: close',
 			'', ''].join(CRLF);
-		soc.write(msg);
-		writeStream.write(msg);
+
+		const onErr = err => err && reject(err);
+
+		soc.write(msg, onErr);
+		writeStream.write(msg, onErr);
 	});
 }
