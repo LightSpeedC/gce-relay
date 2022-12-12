@@ -399,11 +399,11 @@ async function main(log) {
 	 * @param {number} num
 	 * @param {string} method
 	 * @param {string} cmd
-	 * @param {any} args
-	 * @param {any} body
+	 * @param {Object} args
+	 * @param {Buffer | undefined} body
 	 * @returns any {status, options, body}
 	 */
-	async function rpc(num, method, cmd, args, body = null) {
+	async function rpc(num, method, cmd, args, body = undefined) {
 		log.trace(getNow(), num, COLOR_GREEN + localServerName, cmd + ': ' + myStringify(args) + COLOR_RESET);
 		if (body && method !== 'POST')
 			log.error(getNow(), num, ...redError(method + ' method has body'));
