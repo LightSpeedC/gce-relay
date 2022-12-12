@@ -29,6 +29,7 @@ const localServerName = serverName;
 const serverId = uniqId(serverName).split('.').slice(0, 2).join('.');
 const { xRelayCommand, xRelayOptions, xRelayStatus } = envConfig;
 const MAX_THREADS = envConfig.maxThreads || 4;
+const DATA_TIMEOUT = 50; // msec
 
 const COLOR_RESET = '\x1b[m';
 const COLOR_CYAN = '\x1b[36m';
@@ -59,6 +60,8 @@ async function main(log) {
 				// L[2030] con2
 				if (res1.status !== '200 OK')
 					log.warn(getNow(), port, serverName, serviceName, 'L[2030] conn.status:', res1.status);
+
+				let dataList = [], dataLength = 0, dataTimer = null;
 
 				const locConn = {
 					socket: soc,
@@ -94,16 +97,29 @@ async function main(log) {
 
 				// L[3000] data (local)
 				soc.on('data', async (data) => {
-					try {
-						log.trace(getNow(), port, COLOR_MAGENTA + serverName, 'data:', serviceName, 'L[3000] ' + connectionId + COLOR_RESET);
-						// L[3010]
-						const res = await rpc(port, 'POST', 'snd1',
-							{ x: 'L[3010]', serverName, port, serviceName, connectionId, localSeqNo: locConn.localSeqNo++ }, data);
-						if (res.status !== '200 OK')
-							log.warn(getNow(), port, serverName, serviceName, ...redError('conn.snd1.sts: ' + res.status));
-					} catch (err) {
-						release('soc.data.snd1.err:', ...redError(err));
-					}
+					dataList.push(data);
+					dataLength += data.length;
+
+					if (!dataTimer)
+						dataTimer = setTimeout(async () => {
+							try {
+								// log.warn(getNow(), port, COLOR_MAGENTA + serverName, 'data:', serviceName, 'L[3000] ' + connectionId + COLOR_RESET, 'size:', dataList.length);
+
+								dataTimer = null;
+								const data = Buffer.concat(dataList, dataLength);
+								dataList = [];
+								dataLength = 0;
+
+								log.trace(getNow(), port, COLOR_MAGENTA + serverName, 'data:', serviceName, 'L[3000] ' + connectionId + COLOR_RESET);
+								// L[3010]
+								const res = await rpc(port, 'POST', 'snd1',
+									{ x: 'L[3010]', serverName, port, serviceName, connectionId, localSeqNo: locConn.localSeqNo++ }, data);
+								if (res.status !== '200 OK')
+									log.warn(getNow(), port, serverName, serviceName, ...redError('conn.snd1.sts: ' + res.status));
+							} catch (err) {
+								release('soc.data.snd1.err:', ...redError(err));
+							}
+						}, DATA_TIMEOUT);
 				});
 				soc.on('error', async (err) => {
 					try {
@@ -180,6 +196,9 @@ async function main(log) {
 						log.trace(dt, threadId, localServerName, 'conn: from:', serverName, serverId,
 							'to:', serviceName, connectionId);
 						if (remConn) throw new Error('connectionId: eh!? already connected!?');
+
+						let dataList = [], dataLength = 0, dataTimer = null;
+
 						// R[2120] conn
 						const soc = net.connect({ host, port }, async () => {
 							// log.trace(dt, threadId, localServerName, ...redError('[2200] con1: ' + svc));
@@ -223,15 +242,28 @@ async function main(log) {
 							},
 						});
 						soc.on('data', async (data) => { // R[3200] snd6
-							try {
-								const res = await rpc(threadId, 'POST', 'snd6',
-									{ x: 'R[3200]', serverName, serverId, serviceName, connectionId, remoteSeqNo: remoteConnections.get(connectionId).remoteSeqNo++ }, data);
-								if (res.status !== '200 OK')
-									log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] sts: ' + res.status));
-							} catch (err) {
-								// TODO
-								log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] err: '), ...redError(err));
-							}
+							dataList.push(data);
+							dataLength += data.length;
+
+							if (!dataTimer)
+								dataTimer = setTimeout(async () => {
+									try {
+										// log.warn(getNow(), threadId, COLOR_MAGENTA + localServerName, 'snd6: R[3200] ' + connectionId + COLOR_RESET, 'size:', dataList.length);
+
+										dataTimer = null;
+										const data = Buffer.concat(dataList, dataLength);
+										dataList = [];
+										dataLength = 0;
+
+										const res = await rpc(threadId, 'POST', 'snd6',
+											{ x: 'R[3200]', serverName, serverId, serviceName, connectionId, remoteSeqNo: remoteConnections.get(connectionId).remoteSeqNo++ }, data);
+										if (res.status !== '200 OK')
+											log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] sts: ' + res.status));
+									} catch (err) {
+										// TODO
+										log.warn(dt, threadId, ...redError(localServerName + ' snd6: R[3200] err: '), ...redError(err));
+									}
+								}, DATA_TIMEOUT);
 						});
 						soc.on('error', async (err) => { // R[err6] err6.xxxx R[xxxx]
 							log.warn(dt, threadId, ...redError(localServerName + ' err6: ' + connectionId), ...redError(err));
@@ -331,13 +363,13 @@ async function main(log) {
 					else if (cmd === 'end1') { // R[end1.xxxx] end1
 						const { localSeqNo } = res.options;
 						remConn && remConn.endRemote(localSeqNo) ||
-							log.warn(dt, threadId, COLOR_MAGENTA + localServerName, 'end1:', connectionId, 'remConn.socket closed' + COLOR_RESET);
+							log.debug(dt, threadId, COLOR_MAGENTA + localServerName, 'end1:', connectionId, 'remConn.socket closed' + COLOR_RESET);
 					}
 					else if (cmd === 'end6') { // R[end6.xxxx] end6
 						const locConn = localConnections.get(connectionId);
 						const { remoteSeqNo } = res.options;
 						locConn && locConn.endLocal(remoteSeqNo) ||
-							log.warn(dt, threadId, COLOR_MAGENTA + localServerName, 'end6:', connectionId, 'locConn.socket closed' + COLOR_RESET);
+							log.debug(dt, threadId, COLOR_MAGENTA + localServerName, 'end6:', connectionId, 'locConn.socket closed' + COLOR_RESET);
 					}
 					else if (cmd === 'disc') { // X[0190] disc disconnect
 						// TODO
@@ -419,11 +451,11 @@ function convertBuffer(data) {
 
 // log
 function log(...args) {
-	const msg = args.reduce((prev, curr) => {
-		prev += ' ' + String(curr);
-		return prev;
-	}, '').substring(1);
-	console.log(msg);
+	// const msg = args.reduce((prev, curr) => {
+	// 	prev += ' ' + String(curr);
+	// 	return prev;
+	// }, '').substring(1);
+	console.log(...args);
 }
 
 // logInit
@@ -440,5 +472,5 @@ function logInit() {
 	log.error = log;
 	// @ts-ignore
 	log.fatal = log;
-	function noop() {}
+	function noop() { }
 }
