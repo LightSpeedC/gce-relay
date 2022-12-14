@@ -147,6 +147,7 @@ async function relay(req, res, log, dt) {
 					servers.forEach((svr, svrNm) => {
 						if (svrNm != serverName) {
 							const func = svr.recvs.shift();
+							if (!func) return log.error('init.func:', 'serverId:', serverId);
 							func.resOK('init', {
 								x: 'C[0130]',
 								serverName: svr.serverName,

@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2022-12-11 09:35 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-15 08:47 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');

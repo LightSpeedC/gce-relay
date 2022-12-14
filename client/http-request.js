@@ -19,7 +19,7 @@ module.exports = httpRequest;
  * }
  * @returns any {headers: object, body: Buffer}
  */
-function httpRequest({ method, headers, body, targetURL, proxyURL }) {
+function httpRequest({ method, headers, body, targetURL, proxyURL, agent }) {
 
 	return new Promise((resolve, reject) => {
 
@@ -31,6 +31,7 @@ function httpRequest({ method, headers, body, targetURL, proxyURL }) {
 			hostname: parseProxyURL.hostname,
 			port: parseProxyURL.port,
 			path: proxyURL ? targetURL : parseTargetURL.pathname,
+			agent,
 			method,
 			headers: Object.assign({ Host: parseTargetURL.host },
 				parseProxyURL.username ? {
