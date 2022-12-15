@@ -14,7 +14,7 @@ const myStringify = require('../lib/my-stringify');
 const http = require('http');
 const { stdout } = require('process');
 
-const AGENT_KEEP_ALIVE = {keepAlive: false};
+const AGENT_KEEP_ALIVE = { keepAlive: false };
 
 console.log(getNow());
 
@@ -29,7 +29,9 @@ const envConfig = envNo === 0 ? require('./env-config') :
 	envNo === 1 ? require('./env-config1') :
 		envNo === 2 ? require('./env-config2') :
 			envNo === 3 ? require('./env-config3') :
-				require('./env-config4');
+				envNo === 4 ? require('./env-config4') :
+					envNo === 5 ? require('./env-config5') :
+						require('./env-config');
 const { serverName, timeOut } = envConfig;
 const localServerName = serverName;
 const serverId = uniqId(serverName).split('.').slice(0, 2).join('.');
