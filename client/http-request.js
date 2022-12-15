@@ -56,6 +56,7 @@ function httpRequest({ method, headers, body, targetURL, proxyURL, agent }) {
 				status: res.headers[xRelayStatus],
 				command: res.headers[xRelayCommand],
 				options: res.headers[xRelayOptions],
+				res: res,
 			}));
 
 		});

@@ -14,6 +14,10 @@ const myStringify = require('../lib/my-stringify');
 const http = require('http');
 const { stdout } = require('process');
 
+const AGENT_KEEP_ALIVE = {keepAlive: false};
+
+console.log(getNow());
+
 // Content-Type: application/octet-stream
 // Content-Type: application/json; charset=UTF-8
 
@@ -55,7 +59,7 @@ async function main(log) {
 		}, async (soc) => {
 			// L[1030]
 			const connectionId = uniqId('ConnId');
-			let agent = new http.Agent({keepAlive: true});
+			let agent = new http.Agent(AGENT_KEEP_ALIVE);
 			try {
 				// L[2000] conn
 				const res1 = await rpc(agent, port, 'GET', 'conn',
@@ -178,13 +182,17 @@ async function main(log) {
 	for (let i = 0; i < MAX_THREADS; ++i) {
 		thread(1000 + i, i);
 		async function thread(threadId, i) {
-			let agent = new http.Agent({keepAlive: true});
+			let agent = new http.Agent(AGENT_KEEP_ALIVE);
 
 			while (true) {
 				try {
 					// X[0100] recv
 					const res = await rpc(agent, threadId, 'GET', 'recv',
 						{ x: 'X[0100]', serverName, serverId, remoteServiceList });
+					if (res.res && res.res.statusCode !== 200)
+						console.log('recv: X[0100]', res.res.statusCode, res.res.statusMessage);
+					if (res.res && res.res.statusCode === 503)
+						process.exit(2);
 					const dt = getNow();
 					if (res.status !== '200 OK')
 						log.warn(dt, threadId, localServerName, 'X[0100] recv.status:', res.status);
@@ -386,7 +394,9 @@ async function main(log) {
 					}
 					else {
 						log.fatal(dt, threadId, ...redError(localServerName + ' recv: cmd.err: \"' + cmd + '\"'));
-						throw new Error('cmd: ' + cmd + ' eh!?');
+						agent.destroy();
+						agent = new http.Agent(AGENT_KEEP_ALIVE);
+						throw /*new Error*/ ('cmd: ' + cmd + ' eh!?');
 					}
 					waitSeconds = 0;
 				}
@@ -427,6 +437,8 @@ async function main(log) {
 				[xRelayOptions]: JSON.stringify(args),
 			},
 		});
+		if (res.res && res.res.statusCode !== 200)
+			console.log('rpc: cd:', res.res.statusCode, res.res.statusMessage);
 		// const dt = getNow();
 		// for (let i = 0; i < res.rawHeaders.length; i += 2)
 		// 	log.trace(dt, num, localServerName, 'rpc.res', COLOR_CYAN + res.rawHeaders[i] + ': ' + res.rawHeaders[i + 1] + COLOR_RESET);
@@ -441,6 +453,7 @@ async function main(log) {
 			headers: res.headers,
 			rawHeaders: res.rawHeaders,
 			body: res.body,
+			res: res.res,
 		};
 	}
 }
