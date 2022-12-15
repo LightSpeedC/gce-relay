@@ -23,6 +23,7 @@ relayOptions: {
 	remoteSeqNo
 	localSeqNo
 	command
+	timeOut
 }
 
 connectionIdはDate.now().toString(36) + '.' + 連番で良い
@@ -70,8 +71,10 @@ async function relay(req, res, log, dt) {
 	log.trace(dt, '##' + COLOR_GREEN, relayCommand + ':', myStringify(relayOptions) + COLOR_RESET);
 
 	const data = await stream2buffer(req);
+	let timer = null;
 
 	function resOK(cmd, args, body = undefined) {
+		if (timer) { clearTimeout(timer); timer = null; }
 		const sts = '200 OK';
 		res.writeHead(200, {
 			'Content-Type': 'application/octet-stream',
@@ -86,6 +89,7 @@ async function relay(req, res, log, dt) {
 	}
 
 	function resNG(cmd, args, body = undefined) {
+		if (timer) { clearTimeout(timer); timer = null; }
 		const sts = '400 Bad Request';
 		res.writeHead(400, {
 			'Content-Type': 'application/octet-stream',
@@ -101,7 +105,7 @@ async function relay(req, res, log, dt) {
 	switch (relayCommand) {
 		case 'recv': // C[0110] recv
 			{
-				const { serverName, serverId, remoteServiceList } = relayOptions;
+				const { serverName, serverId, remoteServiceList, timeOut } = relayOptions;
 				let svr = servers.get(serverName);
 				if (svr && svr.serverId !== serverId) {
 					// TODO release or dealloc
@@ -119,7 +123,16 @@ async function relay(req, res, log, dt) {
 					svr = null;
 				}
 				if (svr) {
-					svr.recvs.push({ resOK, resNG });
+					const func = { resOK, resNG };
+					if (timeOut) timer = setTimeout(() => {
+						if (timer) timer = null;
+						const ii = svr.recvs.findIndex(f => f == func);
+						if (ii >= 0) {
+							const ff = svr.recvs.splice(ii, 1);
+							ff[0].resOK('time', {});
+						}
+					}, timeOut * 1000);
+					svr.recvs.push(func);
 					if (svr.sends.length) svr.sends.shift()();
 				}
 				else {
@@ -354,7 +367,7 @@ async function relay(req, res, log, dt) {
 			}
 			return;
 		case 'snd2': // C[3060]
-			resOK('snd3', {x:'C[3060]', ...relayOptions});
+			resOK('snd3', { x: 'C[3060]', ...relayOptions });
 		case 'else':
 			break;
 		default:

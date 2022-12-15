@@ -30,7 +30,7 @@ const envConfig = envNo === 0 ? require('./env-config') :
 		envNo === 2 ? require('./env-config2') :
 			envNo === 3 ? require('./env-config3') :
 				require('./env-config4');
-const { serverName } = envConfig;
+const { serverName, timeOut } = envConfig;
 const localServerName = serverName;
 const serverId = uniqId(serverName).split('.').slice(0, 2).join('.');
 const { xRelayCommand, xRelayOptions, xRelayStatus } = envConfig;
@@ -180,6 +180,7 @@ async function main(log) {
 
 	// X: Local/Remote: recv
 	for (let i = 0; i < MAX_THREADS; ++i) {
+		await sleep(i * 1000);
 		thread(1000 + i, i);
 		async function thread(threadId, i) {
 			let agent = new http.Agent(AGENT_KEEP_ALIVE);
@@ -188,7 +189,7 @@ async function main(log) {
 				try {
 					// X[0100] recv
 					const res = await rpc(agent, threadId, 'GET', 'recv',
-						{ x: 'X[0100]', serverName, serverId, remoteServiceList });
+						{ x: 'X[0100]', serverName, serverId, remoteServiceList, timeOut });
 					if (res.res && res.res.statusCode !== 200)
 						console.log('recv: X[0100]', res.res.statusCode, res.res.statusMessage);
 					if (res.res && res.res.statusCode === 503)
@@ -387,6 +388,10 @@ async function main(log) {
 						const { remoteSeqNo } = res.options;
 						locConn && locConn.endLocal(remoteSeqNo) ||
 							log.debug(dt, threadId, COLOR_MAGENTA + localServerName, 'end6:', connectionId, 'locConn.socket closed' + COLOR_RESET);
+					}
+					else if (cmd === 'time') { // time timeOut
+						// TODO
+						log.warn(getNow(), threadId, 'time');
 					}
 					else if (cmd === 'disc') { // X[0190] disc disconnect
 						// TODO
