@@ -1,16 +1,16 @@
 module.exports = {
-	serverName: 'server-name',
-	localServices: [
+	sv: 'server-name',
+	locSvc: [
 		{
 			port: 1080,
-			serviceName: 'remote-service-name',
+			svc: 'remote-service-name',
 		},
 		{
 			port: 2080,
-			serviceName: 'remote-service-name2',
+			svc: 'remote-service-name2',
 		},
 	],
-	remoteServices: {
+	remSvc: {
 		'remote-service-name': {
 			host: 'localhost',
 			port: 80,

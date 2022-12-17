@@ -54,10 +54,10 @@ function mkdirSync(dir, num, dt) {
 const IMAGES_PATH = path.resolve(__dirname, 'images');
 const FAVICON = fs.readFileSync(path.resolve(IMAGES_PATH, 'icons8-rgb-circle2-color-96.png'));
 
-let seq = 0;
-function getSeq() {
-	const s = String(seq);
-	seq = (seq + 1) % 10000;
+let seqNum = 0;
+function getSeqNum() {
+	const s = String(seqNum);
+	seqNum = (seqNum + 1) % 10000;
 	return ('0000' + s).substr(-4);
 }
 
@@ -98,7 +98,7 @@ setInterval(() => {
 // http.server
 http.createServer((req, res) => {
 	const dtStart = new Date();
-	const dt = getNow(dtStart) + '-' + getSeq();
+	const dt = getNow(dtStart) + '-' + getSeqNum();
 	const reqUrl = req.url || '';
 	const clientIp = (req.socket.remoteAddress || '').replace('::ffff:', '');
 	const serverIp = req.headers.host || req.socket.localAddress || '';
