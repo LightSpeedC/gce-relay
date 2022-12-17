@@ -2,17 +2,26 @@
 
 'use strict';
 
-const RELEASE = '2022-11-26 16:53 JST Release (since 2022-11-21)';
+const RELEASE = '2022-12-15 08:47 JST Release (since 2022-11-21)';
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const DateTime = require('date-time-string');
 const dnsReverse = require('./dns-reverse');
 const dnsResolve = require('./dns-resolve');
+const relay = require('./relay');
+const envConfig = require('./env-config');
+const getNow = require('../lib/get-now');
+const redError = require('../lib/red-error');
+const frequentErrors = require('../lib/frequent-errors');
+const LOG_LEVEL = require('../lib/log-level');
 
 const PORT = 80;
+const COLOR_REGEXP = /\x1b\[[0-9;]*m/g;
+const COLOR_RESET = '\x1b[m';
+const COLOR_GREEN_BOLD = '\x1b[32;1m';
+const GENERIC_USER_TIMEOUT = 20 * 1000; // 20 sec.
 
 const STARTED = getNow() + ' Started';
 const CRLF = '\r\n';
@@ -25,6 +34,7 @@ const LOGS_ROOT = path.resolve(__dirname, '../../gce-relay-logs');
 let w = null;
 let yyyymmdd = '00000000';
 logRotate();
+logInit();
 
 // mkdirSync
 function mkdirSync(dir, num, dt) {
@@ -72,14 +82,14 @@ function logRotate() {
 
 // map<string, {date: Date, clientNames: string}>
 const cacheMap = new Map();
-const CLEAR_CACHE_INTERVAL_TIMER = 10 * 60 * 1000; // 10 min.
-const CLEAR_CACHE_TIMEOUT = 20 * 60 * 1000; // 20 min.
+const CLEAR_CACHE_INTERVAL_TIMER = 3 * 3600 * 1000; // 3 hours.
+const CLEAR_CACHE_TIMEOUT = 24 * 3600 * 1000; // 24 hours.
 setInterval(() => {
 	const dt = new Date();
 	cacheMap.forEach((val, key) => {
 		const deltaTime = dt.valueOf() - val.date.valueOf();
 		if (deltaTime > CLEAR_CACHE_TIMEOUT) {
-			log(getNow(dt) + '      ? delete cache ip:', key, 'time:', deltaTime, 'msec');
+			log(getNow(dt) + '      ?? delete cache ip:', key, 'time:', deltaTime, 'msec', val.clientNames);
 			cacheMap.delete(key);
 		}
 	});
@@ -93,7 +103,12 @@ http.createServer((req, res) => {
 	const clientIp = (req.socket.remoteAddress || '').replace('::ffff:', '');
 	const serverIp = req.headers.host || req.socket.localAddress || '';
 	const reqVer = 'HTTP/' + req.httpVersion;
-	processRequest();
+	let errorOccured = false;
+	processRequest().catch(err => {
+		log(dt, '//', err);
+		log(dt, '//', err.stack);
+		console.error(err);
+	});
 	async function processRequest() {
 		try {
 			const ent = cacheMap.get(clientIp);
@@ -105,20 +120,33 @@ http.createServer((req, res) => {
 				clientNames = clientNameList.join(', ');
 				cacheMap.set(clientIp, { date: dtStart, clientNames });
 			}
-			let info = [clientNames, req.method, serverIp + reqUrl, reqVer].join(' ');
+			const serverIpUrl = serverIp + (reqUrl.startsWith('/') ? '' : ' ') + reqUrl;
+			let info = [clientNames, req.method, serverIpUrl, reqVer].join(' ');
 			logRotate();
+
+			// relayPath
+			if (reqUrl === envConfig.relayPath &&
+				req.headers[envConfig.xRelayCommand] &&
+				req.headers[envConfig.xRelayOptions]) {
+				LOG_LEVEL.ERROR >= envConfig.logLevel &&
+					clientIp !== '::1' && log(dt, '::', info);
+				return await relay(req, res, log, dt);
+			}
 			log(dt, '::', info);
+			if (reqUrl === envConfig.relayPath)
+				log(dt, '%%', req.method, reqUrl, 'protocol error');
 
 			// favicon
-			if (req.method === 'GET' && reqUrl.startsWith('/favicon.ico')) {
-				res.writeHead(200, { 'content-type': 'image/png' });
-				res.end(FAVICON);
+			if (req.method === 'GET' && reqUrl === '/favicon.ico') {
+				res.writeHead(200, { 'Content-Type': 'image/png' });
+				res.write(FAVICON, onErr);
+				res.end();
 				return;
 			}
 
-			res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+			res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
 			for (let i = 0; i < req.rawHeaders.length; i += 2) {
-				log(dt, '= ' + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1]);
+				log(dt, '== ' + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1]);
 				info += CRLF + req.rawHeaders[i] + ': ' + req.rawHeaders[i + 1];
 			}
 
@@ -130,22 +158,22 @@ http.createServer((req, res) => {
 					if (data) {
 						const str = data.toString();
 						reqBody += str;
-						log(dt, '$', str);
+						log(dt, '$$', str);
 						writeFlag = true;
 					}
 				});
 				req.on('end', () => {
-					if (writeFlag) log(dt, '$$$EOF$$$');
+					if (writeFlag) log(dt, '$$ $$$EOF$$$');
 					resolve(reqBody);
 				});
 			});
 
 			const deltaTime = Date.now() - dtStart.valueOf();
-			log(dt, '*', deltaTime.toLocaleString(), 'msec.');
+			log(dt, '**', deltaTime.toLocaleString(), 'msec.');
 
 			const msg = `
 <h1>Hello, ${clientNames}</h1>
-<h2>${req.method} ${serverIp + reqUrl} ${reqVer}</h2>
+<h2>${req.method} ${serverIpUrl} ${reqVer}</h2>
 <hr>
 
 <b>YOUR REQUEST INFO:</b>
@@ -164,18 +192,67 @@ ${RELEASE}
 </pre>
 `;
 
-			res.end(msg);
+			res.write(msg, onErr);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nDid you wait for my response?\n', onErr);
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nReally?\n', onErr);
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT * 2);
+			setTimeout(() => {
+				if (errorOccured) return;
+				try {
+					res.write('<br>\nYou are very patient. :-)\n', onErr);
+					res.end();
+				} catch (err) { onErr(err); }
+			}, GENERIC_USER_TIMEOUT * 3);
+
 		} catch (err) {
-			log(dt, err + os.EOL + err.stack);
-			res.end('err');
+			onErr(err);
+		}
+
+		/**
+		 * onErr
+		 * @param {Error | null | undefined | any} err 
+		 */
+		function onErr(err) {
+			if (!err) return;
+			const code = err && err.code || err.message;
+			if (frequentErrors(err))
+				log(dt, '&&', err + '');
+			else
+				log(dt, '&&', err + os.EOL + err.stack);
+			try {
+				res.write('err', err => {
+					if (err) {
+						// @ts-ignore
+						if (code !== (err && err.code || err.message))
+							log(dt, '&&', err + os.EOL + err.stack);
+					}
+				});
+				res.end();
+			}
+			catch (err) {
+				if (frequentErrors(err))
+					log(dt, '&&', err + '');
+				else
+					log(dt, '&&', err + os.EOL + err.stack);
+			}
+			errorOccured = true;
 		}
 	}
-}).listen(PORT, () => console.log('started'));
-
-// getNow
-function getNow(dt = new Date()) {
-	return DateTime.toDateTimeString(dt);
-}
+}).listen(PORT, () => {
+	log(getNow(), COLOR_GREEN_BOLD +
+		`        port ${PORT}, listening started ` + COLOR_RESET + RELEASE);
+}).on('error', err => {
+	log(getNow(), '       ', ...redError(err));
+});
 
 // log
 function log(...args) {
@@ -183,6 +260,31 @@ function log(...args) {
 		prev += ' ' + String(curr);
 		return prev;
 	}, '').substring(1) + os.EOL;
-	stdout.write(msg);
-	w.write(msg);
+	stdout.write(msg, onErr);
+	w && w.write(msg.replace(COLOR_REGEXP, ''), onErr);
+
+	/**
+	 * onErr
+	 * @param {Error | null | undefined} err 
+	 */
+	function onErr(err) {
+		if (err) console.log(err);
+	}
+}
+
+// logInit
+function logInit() {
+	// @ts-ignore
+	log.trace = noop;
+	// @ts-ignore
+	log.info = noop;
+	// @ts-ignore
+	log.debug = noop;
+	// @ts-ignore
+	log.warn = log;
+	// @ts-ignore
+	log.error = log;
+	// @ts-ignore
+	log.fatal = log;
+	function noop() {}
 }

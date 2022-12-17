@@ -12,9 +12,12 @@ module.exports = dnsResolve;
  * @returns string[]
  */
 function dnsResolve(hostname) {
-	return new Promise(resolve =>
+	return new Promise(resolve => {
+		if (hostname.startsWith('::'))
+			return resolve([hostname]);
 		dns.resolve(hostname, (err, ips) =>
 			resolve(!err ? ips :
 				err.code === 'ENOTFOUND' ? [hostname] :
-					[hostname, err + ''])));
+					[hostname, 'dns.resolve(' + hostname + '): ' + err + '']));
+	});
 }
