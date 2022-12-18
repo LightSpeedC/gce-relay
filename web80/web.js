@@ -11,7 +11,7 @@ const http = require('http');
 const dnsReverse = require('./dns-reverse');
 const dnsResolve = require('./dns-resolve');
 const relay = require('./relay');
-const envConfig = require('./env-config');
+const { logLevel, relayPath, xRelayOptions } = require('./env-config');
 const getNow = require('../lib/get-now');
 const redError = require('../lib/red-error');
 const frequentErrors = require('../lib/frequent-errors');
@@ -125,15 +125,16 @@ http.createServer((req, res) => {
 			logRotate();
 
 			// relayPath
-			if (reqUrl === envConfig.relayPath &&
-				req.headers[envConfig.xRelayCommand] &&
-				req.headers[envConfig.xRelayOptions]) {
-				LOG_LEVEL.ERROR >= envConfig.logLevel &&
+			if (reqUrl === relayPath &&
+				req.headers[xRelayOptions]) {
+				// @ts-ignore
+				const opts = JSON.parse(req.headers[xRelayOptions]);
+				LOG_LEVEL.ERROR >= logLevel &&
 					clientIp !== '::1' && log(dt, '::', info);
-				return await relay(req, res, log, dt);
+				return await relay(req, res, log, dt, opts);
 			}
 			log(dt, '::', info);
-			if (reqUrl === envConfig.relayPath)
+			if (reqUrl === relayPath)
 				log(dt, '%%', req.method, reqUrl, 'protocol error');
 
 			// favicon
@@ -275,16 +276,15 @@ function log(...args) {
 // logInit
 function logInit() {
 	// @ts-ignore
-	log.trace = noop;
+	log.trace = LOG_LEVEL.TRACE >= logLevel ? log : null;
 	// @ts-ignore
-	log.info = noop;
+	log.info = LOG_LEVEL.INFO >= logLevel ? log : null;
 	// @ts-ignore
-	log.debug = noop;
+	log.debug = LOG_LEVEL.DEBUG >= logLevel ? log : null;
 	// @ts-ignore
-	log.warn = log;
+	log.warn = LOG_LEVEL.WARN >= logLevel ? log : null;
 	// @ts-ignore
-	log.error = log;
+	log.error = LOG_LEVEL.ERROR >= logLevel ? log : null;
 	// @ts-ignore
-	log.fatal = log;
-	function noop() {}
+	log.fatal = LOG_LEVEL.FATAL >= logLevel ? log : null;
 }

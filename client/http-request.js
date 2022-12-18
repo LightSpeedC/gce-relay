@@ -4,7 +4,7 @@
 
 const http = require('http');
 const envConfig = require('./env-config');
-const { xRelayCommand, xRelayOptions, xRelayStatus } = envConfig;
+const { xRelayOptions } = envConfig;
 
 module.exports = httpRequest;
 
@@ -49,15 +49,19 @@ function httpRequest({ method, headers, body, targetURL, proxyURL, agent }) {
 				dataList.push(data);
 				dataLength += data.length;
 			});
-			res.on('end', () => resolve({
-				headers: res.headers,
-				rawHeaders: res.rawHeaders,
-				body: Buffer.concat(dataList, dataLength),
-				status: res.headers[xRelayStatus],
-				command: res.headers[xRelayCommand],
-				options: res.headers[xRelayOptions],
-				res: res,
-			}));
+			res.on('end', () => {
+				// @ts-ignore
+				const options = JSON.parse(res.headers[xRelayOptions] || '{}');
+				resolve({
+					headers: res.headers,
+					rawHeaders: res.rawHeaders,
+					body: Buffer.concat(dataList, dataLength),
+					status: options.sts,
+					command: options.cmd,
+					options,
+					res,
+				});
+			});
 
 		});
 
