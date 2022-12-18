@@ -39,7 +39,7 @@ const server = http.createServer(function onCliReq(cliReq, cliRes) {
   });
   cliReq.pipe(svrReq);
   svrReq.on('error', function onSvrReqErr(err) {
-    cliRes.writeHead(400, err.message, {'content-type': 'text/html'});
+    cliRes.writeHead(400, err.message, {'Content-Type': 'text/html; charset=UTF-8'});
     cliRes.write('<h1>' + err.message + '<br/>' + cliReq.url + '</h1>',
       err => onErr(err, 'svrReqErr', x.hostname + ':' + (x.port || 80), svrSoc));
     cliRes.end();
