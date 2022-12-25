@@ -28,11 +28,11 @@ const envConfig = envNo === 0 ? require('./env-config') :
 				envNo === 4 ? require('./env-config4') :
 					envNo === 5 ? require('./env-config5') :
 						require('./env-config');
-const { sv, timeOut, xRelayOptions, logLevel } = envConfig;
+const { sv, timeOut, xRelayOptions, logLevel, bufferingDelay } = envConfig;
 const locSv = sv;
 const svID = uniqId(sv).split('.').slice(0, 2).join('.');
 const MAX_THREADS = envConfig.maxThreads || 4;
-const DATA_TIMEOUT = 50; // msec
+const DATA_TIMEOUT = bufferingDelay || 50; // msec
 
 const COLOR_RESET = '\x1b[m';
 const COLOR_CYAN = '\x1b[36m';
