@@ -83,8 +83,12 @@ async function main(log) {
 					},
 					writeLocal(seq, data, onErr) {
 						this.sends[seq] = () => {
-							this.socket.write(data, onErr);
-							log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
+							if (this.socket) {
+								this.socket.write(data, onErr);
+								log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
+							}
+							else
+								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is null');
 						};
 						this.flushLocal();
 					},
@@ -107,7 +111,7 @@ async function main(log) {
 					if (!dataTimer)
 						dataTimer = setTimeout(async () => {
 							try {
-								log.info && log.info(getNow(), port, COLOR_GREEN + sv, 'data:', svc, 'L[3000] ' + cID + COLOR_RESET, 'size:', dataLength, ...(dataList.length > 1 ? ['[', ...dataList.map(x => x.length), ']']: []));
+								log.info && log.info(getNow(), port, COLOR_GREEN + sv, 'data:', svc, 'L[3000] ' + cID + COLOR_RESET, 'size:', dataLength, ...(dataList.length > 1 ? ['[', ...dataList.map(x => x.length), ']'] : []));
 
 								dataTimer = null;
 								const data = Buffer.concat(dataList, dataLength);
@@ -247,8 +251,12 @@ async function main(log) {
 							},
 							writeRemote(seq, data, onErr) {
 								this.sends[seq] = () => {
-									this.socket.write(data, onErr);
-									log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
+									if (this.socket) {
+										this.socket.write(data, onErr);
+										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
+									}
+									else
+										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is null');
 								};
 								this.flushRemote();
 							},
@@ -266,7 +274,7 @@ async function main(log) {
 							if (!dataTimer)
 								dataTimer = setTimeout(async () => {
 									try {
-										log.info && log.info(getNow(), threadId, COLOR_GREEN + locSv, 'snd6: R[3200] ' + cID + COLOR_RESET, 'size:', dataLength, ...(dataList.length > 1 ? ['[', ...dataList.map(x => x.length), ']']: []));
+										log.info && log.info(getNow(), threadId, COLOR_GREEN + locSv, 'snd6: R[3200] ' + cID + COLOR_RESET, 'size:', dataLength, ...(dataList.length > 1 ? ['[', ...dataList.map(x => x.length), ']'] : []));
 
 										dataTimer = null;
 										const data = Buffer.concat(dataList, dataLength);
