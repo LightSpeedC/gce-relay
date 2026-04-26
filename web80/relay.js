@@ -376,6 +376,7 @@ async function relay(req, res, log, dt, opts) {
 			return;
 		case 'snd2': // C[3060]
 			resOK('snd3', { x: 'C[3060]', ...opts });
+			return;
 		case 'else':
 			break;
 		default:
