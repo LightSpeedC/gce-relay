@@ -173,7 +173,10 @@ async function main(log) {
 			}
 			function commonRelease() {
 				const locConn = localConnections.get(cID);
-				locConn && locConn.endLocal(locConn.remSeq);
+				if (locConn) {
+					locConn.sends = {};
+					locConn.endLocal(locConn.remSeq);
+				}
 				localConnections.delete(cID);
 			}
 		});
