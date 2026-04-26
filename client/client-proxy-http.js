@@ -286,8 +286,10 @@ async function main(log) {
 										dataList = [];
 										dataLength = 0;
 
+										const conn = remoteConnections.get(cID);
+										if (!conn) return;
 										const res = await rpc(agent, threadId, 'POST', 'snd6',
-											{ x: 'R[3200]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ }, data);
+											{ x: 'R[3200]', sv, svID, svc, cID, remSeq: conn.remSeq++ }, data);
 										if (res.status !== 200)
 											log.warn && log.warn(dt, threadId, ...redError(locSv + ' snd6: R[3200] sts: ' + res.status));
 									} catch (err) {
@@ -302,8 +304,10 @@ async function main(log) {
 							remEnded = true;
 							log.warn && log.warn(dt, threadId, ...redError(locSv + ' err6: ' + cID), ...redError(err));
 							try {
+								const conn = remoteConnections.get(cID);
+								if (!conn) return;
 								const res = await rpc(agent, threadId, 'GET', 'end6',
-									{ x: 'R[err6]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ });
+									{ x: 'R[err6]', sv, svID, svc, cID, remSeq: conn.remSeq++ });
 								if (res.status !== 200)
 									log.warn && log.warn(dt, threadId, ...redError(locSv + ' err6: ' + cID + ' sts: ' + res.status));
 							} catch (err) {
@@ -315,8 +319,10 @@ async function main(log) {
 							if (remEnded) return;
 							remEnded = true;
 							try {
+								const conn = remoteConnections.get(cID);
+								if (!conn) return;
 								const res = await rpc(agent, threadId, 'GET', 'end6',
-									{ x: 'R[end6.xxxx]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ });
+									{ x: 'R[end6.xxxx]', sv, svID, svc, cID, remSeq: conn.remSeq++ });
 								if (res.status !== 200)
 									log.warn && log.warn(dt, threadId, ...redError(locSv + ' end6: sts: ' + res.status));
 							} catch (err) {
