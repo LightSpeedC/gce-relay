@@ -388,12 +388,14 @@ async function main(log) {
 						const { locSeq } = res.options;
 						remConn && remConn.endRemote(locSeq) ||
 							log.debug && log.debug(dt, threadId, COLOR_MAGENTA + locSv, 'end1:', cID, 'remConn.socket closed' + COLOR_RESET);
+						remoteConnections.delete(cID);
 					}
 					else if (cmd === 'end6') { // R[end6.xxxx] end6
 						const locConn = localConnections.get(cID);
 						const { remSeq } = res.options;
 						locConn && locConn.endLocal(remSeq) ||
 							log.debug && log.debug(dt, threadId, COLOR_MAGENTA + locSv, 'end6:', cID, 'locConn.socket closed' + COLOR_RESET);
+						remoteConnections.delete(cID);
 					}
 					else if (cmd === 'time') { // time timeOut
 						// TODO
