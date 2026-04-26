@@ -129,7 +129,10 @@ async function main(log) {
 							}
 						}, DATA_TIMEOUT);
 				});
+				let locEnded = false;
 				soc.on('error', async (err) => {
+					if (locEnded) return;
+					locEnded = true;
 					try {
 						log.warn && log.warn(getNow(), port, ...redError(sv + ' err1: ' + svc + ' L[soc.err]:'), ...redError(err));
 						// L[err.xxxx]
@@ -143,6 +146,8 @@ async function main(log) {
 					}
 				});
 				soc.on('end', async () => {
+					if (locEnded) return;
+					locEnded = true;
 					try {
 						log.debug && log.debug(getNow(), port, COLOR_MAGENTA + sv, 'end1:', svc, cID + COLOR_RESET);
 						// L[end1.xxxx]
@@ -168,7 +173,10 @@ async function main(log) {
 			}
 			function commonRelease() {
 				const locConn = localConnections.get(cID);
-				locConn && locConn.endLocal(locConn.remSeq);
+				if (locConn) {
+					locConn.sends = {};
+					locConn.endLocal(locConn.remSeq);
+				}
 				localConnections.delete(cID);
 			}
 		});
@@ -281,8 +289,10 @@ async function main(log) {
 										dataList = [];
 										dataLength = 0;
 
+										const conn = remoteConnections.get(cID);
+										if (!conn) return;
 										const res = await rpc(agent, threadId, 'POST', 'snd6',
-											{ x: 'R[3200]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ }, data);
+											{ x: 'R[3200]', sv, svID, svc, cID, remSeq: conn.remSeq++ }, data);
 										if (res.status !== 200)
 											log.warn && log.warn(dt, threadId, ...redError(locSv + ' snd6: R[3200] sts: ' + res.status));
 									} catch (err) {
@@ -291,11 +301,16 @@ async function main(log) {
 									}
 								}, DATA_TIMEOUT);
 						});
+						let remEnded = false;
 						soc.on('error', async (err) => { // R[err6] err6.xxxx R[xxxx]
+							if (remEnded) return;
+							remEnded = true;
 							log.warn && log.warn(dt, threadId, ...redError(locSv + ' err6: ' + cID), ...redError(err));
 							try {
+								const conn = remoteConnections.get(cID);
+								if (!conn) return;
 								const res = await rpc(agent, threadId, 'GET', 'end6',
-									{ x: 'R[err6]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ });
+									{ x: 'R[err6]', sv, svID, svc, cID, remSeq: conn.remSeq++ });
 								if (res.status !== 200)
 									log.warn && log.warn(dt, threadId, ...redError(locSv + ' err6: ' + cID + ' sts: ' + res.status));
 							} catch (err) {
@@ -304,9 +319,13 @@ async function main(log) {
 							}
 						});
 						soc.on('end', async () => { // R[end6.xxxx] end6 R[xxxx]
+							if (remEnded) return;
+							remEnded = true;
 							try {
+								const conn = remoteConnections.get(cID);
+								if (!conn) return;
 								const res = await rpc(agent, threadId, 'GET', 'end6',
-									{ x: 'R[end6.xxxx]', sv, svID, svc, cID, remSeq: remoteConnections.get(cID).remSeq++ });
+									{ x: 'R[end6.xxxx]', sv, svID, svc, cID, remSeq: conn.remSeq++ });
 								if (res.status !== 200)
 									log.warn && log.warn(dt, threadId, ...redError(locSv + ' end6: sts: ' + res.status));
 							} catch (err) {
@@ -388,12 +407,14 @@ async function main(log) {
 						const { locSeq } = res.options;
 						remConn && remConn.endRemote(locSeq) ||
 							log.debug && log.debug(dt, threadId, COLOR_MAGENTA + locSv, 'end1:', cID, 'remConn.socket closed' + COLOR_RESET);
+						remoteConnections.delete(cID);
 					}
 					else if (cmd === 'end6') { // R[end6.xxxx] end6
 						const locConn = localConnections.get(cID);
 						const { remSeq } = res.options;
 						locConn && locConn.endLocal(remSeq) ||
 							log.debug && log.debug(dt, threadId, COLOR_MAGENTA + locSv, 'end6:', cID, 'locConn.socket closed' + COLOR_RESET);
+						remoteConnections.delete(cID);
 					}
 					else if (cmd === 'time') { // time timeOut
 						// TODO

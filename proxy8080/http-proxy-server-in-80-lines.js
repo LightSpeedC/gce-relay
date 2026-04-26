@@ -118,11 +118,12 @@ server.on('connection', function onConn(cliSoc) {
 // 接続時間・接続数の表示
 let connCount = 0;
 server.on('connection', function onConn(cliSoc) {
+  if (!((cliSoc.remoteAddress || 'x') in whiteAddressList)) return;
   // @ts-ignore
   cliSoc.connTime = new Date();
   console.log('++conn: ' + (++connCount) + ' from: ' + cliSoc.remoteAddress);
   cliSoc.on('close', function onDisconn() {
-    console.log('--conn: ' + (--connCount) + ' time: ' + 
+    console.log('--conn: ' + (--connCount) + ' time: ' +
     // @ts-ignore
       (new Date() - cliSoc.connTime) / 1000.0 + ' sec');
   });

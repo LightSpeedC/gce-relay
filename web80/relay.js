@@ -37,6 +37,8 @@ command
 	recv
 */
 
+const GC_TIMEOUT = 10 * 60 * 1000; // 10 minutes: remove server entry if no recv arrives
+
 // servers
 const servers = new Map();
 /*
@@ -123,6 +125,7 @@ async function relay(req, res, log, dt, opts) {
 					svr = null;
 				}
 				if (svr) {
+					if (svr.gcTimer) { clearTimeout(svr.gcTimer); svr.gcTimer = null; }
 					const func = { resOK, resNG };
 					if (timeOut) timer = setTimeout(() => {
 						if (timer) timer = null;
@@ -130,6 +133,12 @@ async function relay(req, res, log, dt, opts) {
 						if (ii >= 0) {
 							const ff = svr.recvs.splice(ii, 1);
 							ff[0].resOK('time', {});
+						}
+						if (svr.recvs.length === 0) {
+							svr.gcTimer = setTimeout(() => {
+								log.warn && log.warn(getNow(), '***GC***', sv, svr.svID);
+								servers.delete(sv);
+							}, GC_TIMEOUT);
 						}
 					}, timeOut * 1000);
 					svr.recvs.push(func);
@@ -148,6 +157,7 @@ async function relay(req, res, log, dt, opts) {
 						}, {}),
 						recvs: [],
 						sends: [],
+						gcTimer: null,
 					});
 					const svL = Array.from(servers)
 						.filter(([svrNm]) => svrNm !== sv)
@@ -376,6 +386,7 @@ async function relay(req, res, log, dt, opts) {
 			return;
 		case 'snd2': // C[3060]
 			resOK('snd3', { x: 'C[3060]', ...opts });
+			return;
 		case 'else':
 			break;
 		default:
