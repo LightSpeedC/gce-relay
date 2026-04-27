@@ -74,11 +74,17 @@ async function main(log) {
 					locSeq: 0,
 					remSeq: 0,
 					sends: {},
-					flushLocal() {
-						while (this.sends[this.remSeq]) {
-							this.sends[this.remSeq]();
-							delete this.sends[this.remSeq];
-							this.remSeq++;
+					flushLocal(forceSeq = -1) {
+						while (true) {
+							if (this.sends[this.remSeq]) {
+								this.sends[this.remSeq]();
+								delete this.sends[this.remSeq];
+								this.remSeq++;
+							} else if (this.remSeq <= forceSeq) {
+								this.remSeq++;
+							} else {
+								break;
+							}
 						}
 					},
 					writeLocal(seq, data, onErr) {
@@ -99,7 +105,7 @@ async function main(log) {
 							// @ts-ignore
 							this.socket = null;
 						};
-						this.flushLocal();
+						this.flushLocal(seq);
 					},
 				};
 				localConnections.set(cID, locConn);
@@ -252,11 +258,17 @@ async function main(log) {
 							locSeq: 0,
 							remSeq: 0,
 							sends: {},
-							flushRemote() {
-								while (this.sends[this.locSeq]) {
-									this.sends[this.locSeq]();
-									delete this.sends[this.locSeq];
-									this.locSeq++;
+							flushRemote(forceSeq = -1) {
+								while (true) {
+									if (this.sends[this.locSeq]) {
+										this.sends[this.locSeq]();
+										delete this.sends[this.locSeq];
+										this.locSeq++;
+									} else if (this.locSeq <= forceSeq) {
+										this.locSeq++;
+									} else {
+										break;
+									}
 								}
 							},
 							writeRemote(seq, data, onErr) {
@@ -277,7 +289,7 @@ async function main(log) {
 									// @ts-ignore
 									this.socket = null;
 								};
-								this.flushRemote();
+								this.flushRemote(seq);
 							},
 						});
 						soc.on('data', async (data) => { // R[3200] snd6
