@@ -88,7 +88,7 @@ async function main(log) {
 								log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
 							}
 							else
-								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is null or destroyed');
+								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is ' + (!this.socket ? 'null' : 'destroyed'));
 						};
 						this.flushLocal();
 					},
@@ -266,7 +266,7 @@ async function main(log) {
 										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
 									}
 									else
-										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is null or destroyed');
+										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is ' + (!this.socket ? 'null' : 'destroyed'));
 								};
 								this.flushRemote();
 							},
