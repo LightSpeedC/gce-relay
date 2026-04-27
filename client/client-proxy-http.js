@@ -133,6 +133,7 @@ async function main(log) {
 				soc.on('error', async (err) => {
 					if (locEnded) return;
 					locEnded = true;
+					if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; }
 					try {
 						log.warn && log.warn(getNow(), port, ...redError(sv + ' err1: ' + svc + ' L[soc.err]:'), ...redError(err));
 						// L[err.xxxx]
@@ -148,6 +149,7 @@ async function main(log) {
 				soc.on('end', async () => {
 					if (locEnded) return;
 					locEnded = true;
+					if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; }
 					try {
 						log.debug && log.debug(getNow(), port, COLOR_MAGENTA + sv, 'end1:', svc, cID + COLOR_RESET);
 						// L[end1.xxxx]
@@ -269,10 +271,13 @@ async function main(log) {
 								this.flushRemote();
 							},
 							endRemote(seq) {
-								log.trace && log.trace(getNow(), threadId, 'edrm:', locSv, cID, 'l#:', seq, 'endRemote', !!this.socket);
-								if (this.socket) this.socket.end();
-								// @ts-ignore
-								this.socket = null;
+								this.sends[seq] = () => {
+									log.trace && log.trace(getNow(), threadId, 'edrm:', locSv, cID, 'l#:', seq, 'endRemote', !!this.socket);
+									if (this.socket) this.socket.end();
+									// @ts-ignore
+									this.socket = null;
+								};
+								this.flushRemote();
 							},
 						});
 						soc.on('data', async (data) => { // R[3200] snd6
@@ -305,6 +310,7 @@ async function main(log) {
 						soc.on('error', async (err) => { // R[err6] err6.xxxx R[xxxx]
 							if (remEnded) return;
 							remEnded = true;
+							if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; }
 							log.warn && log.warn(dt, threadId, ...redError(locSv + ' err6: ' + cID), ...redError(err));
 							try {
 								const conn = remoteConnections.get(cID);
@@ -321,6 +327,7 @@ async function main(log) {
 						soc.on('end', async () => { // R[end6.xxxx] end6 R[xxxx]
 							if (remEnded) return;
 							remEnded = true;
+							if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; }
 							try {
 								const conn = remoteConnections.get(cID);
 								if (!conn) return;
