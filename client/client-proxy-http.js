@@ -83,12 +83,12 @@ async function main(log) {
 					},
 					writeLocal(seq, data, onErr) {
 						this.sends[seq] = () => {
-							if (this.socket) {
+							if (this.socket && !this.socket.destroyed) {
 								this.socket.write(data, onErr);
 								log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
 							}
 							else
-								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is null');
+								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is null or destroyed');
 						};
 						this.flushLocal();
 					},
@@ -261,12 +261,12 @@ async function main(log) {
 							},
 							writeRemote(seq, data, onErr) {
 								this.sends[seq] = () => {
-									if (this.socket) {
+									if (this.socket && !this.socket.destroyed) {
 										this.socket.write(data, onErr);
 										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
 									}
 									else
-										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is null');
+										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is null or destroyed');
 								};
 								this.flushRemote();
 							},
