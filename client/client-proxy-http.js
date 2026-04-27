@@ -94,8 +94,8 @@ async function main(log) {
 					},
 					endLocal(seq) {
 						this.sends[seq] = () => {
-							log.trace && log.trace(getNow(), port, sv, 'edlc:', svc, cID, 'r#:', seq, 'endLocal', !!this.socket);
-							if (this.socket) this.socket.end();
+							log.trace && log.trace(getNow(), port, sv, 'edlc:', svc, cID, 'r#:', seq, 'endLocal', !this.socket ? 'null' : (this.socket.destroyed ? 'destroyed' : 'alive'));
+							if (this.socket && !this.socket.destroyed) this.socket.end();
 							// @ts-ignore
 							this.socket = null;
 						};
@@ -272,8 +272,8 @@ async function main(log) {
 							},
 							endRemote(seq) {
 								this.sends[seq] = () => {
-									log.trace && log.trace(getNow(), threadId, 'edrm:', locSv, cID, 'l#:', seq, 'endRemote', !!this.socket);
-									if (this.socket) this.socket.end();
+									log.trace && log.trace(getNow(), threadId, 'edrm:', locSv, cID, 'l#:', seq, 'endRemote', !this.socket ? 'null' : (this.socket.destroyed ? 'destroyed' : 'alive'));
+									if (this.socket && !this.socket.destroyed) this.socket.end();
 									// @ts-ignore
 									this.socket = null;
 								};
