@@ -12,7 +12,7 @@ module.exports = getAccept;
  * getAccept
  * @param {string} dt Date and Time string
  * @param {string} accept Accept: string
- * @returns 
+ * @returns string
  */
 function getAccept(dt, accept = '') {
 	try {
