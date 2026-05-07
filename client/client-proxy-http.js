@@ -6,6 +6,8 @@
 
 const net = require('net');
 
+const RELEASE = require('../lib/release-version');
+
 const httpRequest = require('./http-request');
 const uniqId = require('./uniq-id');
 const getNow = require('../lib/get-now');
@@ -15,7 +17,7 @@ const http = require('http');
 const LOG_LEVEL = require('../lib/log-level');
 const AGENT_KEEP_ALIVE = { keepAlive: true };
 
-console.log(getNow());
+console.log(getNow(), RELEASE);
 
 const targetURL = process.argv[2];
 const proxyURL = process.argv[3];
@@ -24,9 +26,9 @@ const envNo = Number(process.argv[4] || '0');
 const envConfig = envNo === 0 ? require('./env-config') :
 	envNo === 1 ? require('./env-config1') :
 		envNo === 2 ? require('./env-config2') :
-			envNo === 3 ? require('./env-config3') :
-				envNo === 4 ? require('./env-config4') :
-					envNo === 5 ? require('./env-config5') :
+			envNo === 3 ? require('./env-config-home') :
+				envNo === 4 ? require('./env-config-corp') :
+					envNo === 5 ? require('./env-config-other') :
 						require('./env-config');
 const { sv, timeOut, xRelayOptions, logLevel, bufferingDelay } = envConfig;
 const locSv = sv;

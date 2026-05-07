@@ -2,7 +2,7 @@
 
 'use strict';
 
-const RELEASE = '2026-04-27 11:11 JST Release (since 2022-11-21) ' + process.version;
+const RELEASE = require('../lib/release-version');
 
 const fs = require('fs');
 const os = require('os');
