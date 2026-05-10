@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/LightSpeedC/gce-relay/issues"
   },
-  "homepage": "https://github.com/LightSpeedC/gce-relay#readme"
+  "homepage": "https://github.com/LightSpeedC/gce-relay#readme",
+  "devDependencies": {
+    "@types/node": "^25.6.2"
+  }
 }
