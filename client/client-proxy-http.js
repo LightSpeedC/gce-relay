@@ -157,8 +157,15 @@ async function main(log) {
 						// L[err.xxxx]
 						const res = await rpc(agent, port, 'GET', 'end1',
 							{ x: 'L[err.xxxx]', sv, port, svc, cID, locSeq: locConn.locSeq++ });
-						if (res.status !== 200)
-							log.warn && log.warn(getNow(), port, sv, svc, ...redError('soc.err.end.sts: ' + res.status));
+						if (res.status !== 200) {
+							if (res.status === 404) {
+								log.error && log.error(getNow(), port, sv, svc, ...redError('soc.err.end failed (service not found) cID=' + cID));
+							} else if (res.status === 503) {
+								log.warn && log.warn(getNow(), port, sv, svc, ...redError('soc.err.end failed (temporary) cID=' + cID));
+							} else {
+								log.warn && log.warn(getNow(), port, sv, svc, ...redError('soc.err.end.sts: ' + res.status));
+							}
+						}
 						okRelease('soc.err:', ...redError(err), cID);
 					} catch (err) {
 						errorRelease('soc.err.err:', ...redError(err), cID);
@@ -173,8 +180,15 @@ async function main(log) {
 						// L[end1.xxxx]
 						const res = await rpc(agent, port, 'GET', 'end1',
 							{ x: 'L[end1.xxxx]', sv, port, svc, cID, locSeq: locConn.locSeq++ });
-						if (res.status !== 200)
-							log.warn && log.warn(getNow(), port, sv, 'end1:', svc, ...redError('end1.sts: ' + res.status));
+						if (res.status !== 200) {
+							if (res.status === 404) {
+								log.error && log.error(getNow(), port, sv, 'end1:', svc, ...redError('end1 failed (service not found) cID=' + cID));
+							} else if (res.status === 503) {
+								log.warn && log.warn(getNow(), port, sv, 'end1:', svc, ...redError('end1 failed (temporary) cID=' + cID));
+							} else {
+								log.warn && log.warn(getNow(), port, sv, 'end1:', svc, ...redError('end1.sts: ' + res.status));
+							}
+						}
 						okRelease('soc.end:', cID);
 					} catch (err) {
 						errorRelease('soc.end.err:', ...redError(err), cID);

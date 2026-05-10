@@ -167,6 +167,7 @@ async function relay(req, res, log, dt, opts) {
 						recvs: [],
 						sends: [],
 						gcTimer: null,
+						connections: {},
 					});
 					const svL = Array.from(servers)
 						.filter(([svrNm]) => svrNm !== sv)
@@ -235,6 +236,7 @@ async function relay(req, res, log, dt, opts) {
 					}
 					// log.trace && log.trace(COLOR_RED_BOLD, { sv, svID, svc, cID }, COLOR_RESET);
 					// log.trace && log.trace(COLOR_RED_BOLD, remSvr, COLOR_RESET);
+					locSvr.connections[cID] = { status: 'connecting', locSeq: 0, remSeq: 0 };
 					func.resOK('conn', { x: 'C[2100]', sv, svID, svc, cID });
 					resOK('con2', { x: 'C[2020]', cID });
 				}
