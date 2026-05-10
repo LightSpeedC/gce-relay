@@ -21,3 +21,6 @@ env*
 
 # exclude misc files
 misc/
+
+# Claude code local settings
+.claude/
