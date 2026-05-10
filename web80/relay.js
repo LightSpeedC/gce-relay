@@ -102,9 +102,8 @@ async function relay(req, res, log, dt, opts) {
 			cmd + ':', myStringify(args) + COLOR_RESET);
 	}
 
-	function resNG(cmd, args, body = undefined) {
+	function resNG(cmd, args, body = undefined, sts = 400) {
 		if (timer) { clearTimeout(timer); timer = null; }
-		const sts = 400;
 		res.writeHead(sts, {
 			'Content-Type': 'application/octet-stream',
 			[xRelayOptions]: JSON.stringify(Object.assign({ sts, cmd }, args)),
@@ -203,9 +202,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const locSvr = servers.get(sv);
 				if (!locSvr) {
-					resNG('conn.err', { x: 'C[2010]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('conn.err', { x: 'C[2010]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('conn.err: C[2010]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('eh!? server not found');
+					return;
 				}
 				// if (svr.svID === svID) throw new Error('eh!?');
 				log.trace && log.trace('locSvr.svID:', locSvr.svID, 'svID:', svID);
@@ -229,7 +228,7 @@ async function relay(req, res, log, dt, opts) {
 						sendEntry.timer = setTimeout(() => {
 							const ii = remSvr.sends.indexOf(sendEntry);
 							if (ii >= 0) remSvr.sends.splice(ii, 1);
-							resNG('conn.err', { x: 'C[2100.timeout]', sv, svID, svc, cID, message: 'remote no buffers timeout' });
+							resNG('conn.err', { x: 'C[2100.timeout]', sv, svID, svc, cID, message: 'remote no buffers timeout' }, undefined, 503);
 						}, SENDS_TIMEOUT);
 						remSvr.sends.push(sendEntry);
 						return;
@@ -240,9 +239,9 @@ async function relay(req, res, log, dt, opts) {
 					resOK('con2', { x: 'C[2020]', cID });
 				}
 				else {
-					resNG('conn.err', { x: 'C[2105]', sv, svID, svc, cID, message: 'remote service not found' });
+					resNG('conn.err', { x: 'C[2105]', sv, svID, svc, cID, message: 'remote service not found' }, undefined, 404);
 					log.fatal && log.fatal('conn.err: C[2105]', sv, svID, svc, cID, 'remote service not found');
-					return; // throw new Error('conn.err eh!? remote service not found');
+					return;
 				}
 			}
 			return;
@@ -251,9 +250,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const locSvr = servers.get(sv);
 				if (!locSvr) {
-					resNG('con1.err', { x: 'C[2210]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('con1.err', { x: 'C[2210]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('con1.err: C[2210]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('con1.err eh!? server not found');
+					return;
 				}
 
 				const func = locSvr.recvs.shift();
@@ -266,7 +265,7 @@ async function relay(req, res, log, dt, opts) {
 					sendEntry.timer = setTimeout(() => {
 						const ii = locSvr.sends.indexOf(sendEntry);
 						if (ii >= 0) locSvr.sends.splice(ii, 1);
-						resNG('con1.err', { x: 'C[2220.timeout]', sv, svID, svc, cID, message: 'local no buffers timeout' });
+						resNG('con1.err', { x: 'C[2220.timeout]', sv, svID, svc, cID, message: 'local no buffers timeout' }, undefined, 503);
 					}, SENDS_TIMEOUT);
 					locSvr.sends.push(sendEntry);
 					return;
@@ -281,9 +280,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const locSvr = servers.get(sv);
 				if (!locSvr) {
-					resNG('snd1.err', { x: 'C[3020]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('snd1.err', { x: 'C[3020]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('snd1.err: C[3020]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('snd1.err eh!? server not found');
+					return;
 				}
 				let remSv = '';
 				servers.forEach((svr, svrNm) => {
@@ -306,7 +305,7 @@ async function relay(req, res, log, dt, opts) {
 						sendEntry.timer = setTimeout(() => {
 							const ii = remSvr.sends.indexOf(sendEntry);
 							if (ii >= 0) remSvr.sends.splice(ii, 1);
-							resNG('snd1.err', { x: 'C[3030.timeout]', ...opts, message: 'remote no buffers timeout' });
+							resNG('snd1.err', { x: 'C[3030.timeout]', ...opts, message: 'remote no buffers timeout' }, undefined, 503);
 						}, SENDS_TIMEOUT);
 						remSvr.sends.push(sendEntry);
 						return;
@@ -315,9 +314,9 @@ async function relay(req, res, log, dt, opts) {
 					resOK('snd2', { x: 'C[3030]', ...opts });
 				}
 				else {
-					resNG('snd1.err', { x: 'C[3030]', sv, svID, svc, cID, message: 'remote service not found' });
+					resNG('snd1.err', { x: 'C[3030]', sv, svID, svc, cID, message: 'remote service not found' }, undefined, 404);
 					log.fatal && log.fatal('snd1.err: C[3030]', sv, svID, svc, cID, 'remote service not found');
-					return; // throw new Error('snd1.err eh!? remote service not found');
+					return;
 				}
 			}
 			return;
@@ -326,9 +325,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const svr = servers.get(sv);
 				if (!svr) {
-					resNG('snd6.err', { x: 'C[3210.snd6.xxxx]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('snd6.err', { x: 'C[3210.snd6.xxxx]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('snd6.err: C[3210]', sv, svID, svc, cID, 'remote service not found');
-					return; // throw new Error('snd6.err eh!? server not found');
+					return;
 				}
 
 				const func = svr.recvs.shift();
@@ -341,7 +340,7 @@ async function relay(req, res, log, dt, opts) {
 					sendEntry.timer = setTimeout(() => {
 						const ii = svr.sends.indexOf(sendEntry);
 						if (ii >= 0) svr.sends.splice(ii, 1);
-						resNG('snd6.err', { x: 'C[3220.timeout]', ...opts, message: 'local no buffers timeout' });
+						resNG('snd6.err', { x: 'C[3220.timeout]', ...opts, message: 'local no buffers timeout' }, undefined, 503);
 					}, SENDS_TIMEOUT);
 					svr.sends.push(sendEntry);
 					return;
@@ -356,9 +355,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const svr = servers.get(sv);
 				if (!svr) {
-					resNG('end1.err', { x: '[end1.xxxx1]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('end1.err', { x: '[end1.xxxx1]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('end.err: [end1.xxxx1]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('end.err eh!? server not found');
+					return;
 				}
 				let remSv = '';
 				servers.forEach((val, key) => {
@@ -380,7 +379,7 @@ async function relay(req, res, log, dt, opts) {
 						sendEntry.timer = setTimeout(() => {
 							const ii = remSvr.sends.indexOf(sendEntry);
 							if (ii >= 0) remSvr.sends.splice(ii, 1);
-							resNG('end1.err', { x: '[end1.xxxx3.timeout]', ...opts, message: 'remote no buffers timeout' });
+							resNG('end1.err', { x: '[end1.xxxx3.timeout]', ...opts, message: 'remote no buffers timeout' }, undefined, 503);
 						}, SENDS_TIMEOUT);
 						remSvr.sends.push(sendEntry);
 						return;
@@ -388,9 +387,9 @@ async function relay(req, res, log, dt, opts) {
 					func.resOK('end1', { x: '[end1.xxxx3]', ...opts });
 				}
 				else {
-					resNG('end1.err', { x: '[end1.xxxx4]', sv, svID, svc, cID, message: 'remote service not found' });
+					resNG('end1.err', { x: '[end1.xxxx4]', sv, svID, svc, cID, message: 'remote service not found' }, undefined, 404);
 					log.fatal && log.fatal('end1.err: [end1.xxxx4]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('end.err eh!? remote service not found');
+					return;
 				}
 				resOK('end2', { x: '[end1.xxxx5]', ...opts });
 			}
@@ -400,9 +399,9 @@ async function relay(req, res, log, dt, opts) {
 				const { sv, svID, svc, cID } = opts;
 				const svr = servers.get(sv);
 				if (!svr) {
-					resNG('end6.err', { x: '[end6.xxxx1]', sv, svID, svc, cID, message: 'server not found' });
+					resNG('end6.err', { x: '[end6.xxxx1]', sv, svID, svc, cID, message: 'server not found' }, undefined, 404);
 					log.fatal && log.fatal('end6.err: [end6.xxxx1]', sv, svID, svc, cID, 'server not found');
-					return; // throw new Error('end6.err eh!? server not found');
+					return;
 				}
 
 				const func = svr.recvs.shift();
@@ -415,7 +414,7 @@ async function relay(req, res, log, dt, opts) {
 					sendEntry.timer = setTimeout(() => {
 						const ii = svr.sends.indexOf(sendEntry);
 						if (ii >= 0) svr.sends.splice(ii, 1);
-						resNG('end6.err', { x: '[end6.xxxx4.timeout]', ...opts, message: 'local no buffers timeout' });
+						resNG('end6.err', { x: '[end6.xxxx4.timeout]', ...opts, message: 'local no buffers timeout' }, undefined, 503);
 					}, SENDS_TIMEOUT);
 					svr.sends.push(sendEntry);
 					return;

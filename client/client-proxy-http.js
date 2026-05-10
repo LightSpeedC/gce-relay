@@ -66,7 +66,14 @@ async function main(log) {
 					{ x: 'L[2000]', sv, svID, port, svc, cID });
 				// L[2030] con2
 				if (res1.status !== 200) {
-					log.warn && log.warn(getNow(), port, sv, svc, ...redError('L[2030] conn.status: ' + res1.status));
+					const msg = res1.options && res1.options.message ? (' - ' + res1.options.message) : '';
+					if (res1.status === 404) {
+						log.error && log.error(getNow(), port, sv, svc, ...redError('L[2030] conn failed (service not found)' + msg + ' cID=' + cID));
+					} else if (res1.status === 503) {
+						log.warn && log.warn(getNow(), port, sv, svc, ...redError('L[2030] conn failed (temporary)' + msg));
+					} else {
+						log.warn && log.warn(getNow(), port, sv, svc, ...redError('L[2030] conn.status: ' + res1.status + msg));
+					}
 					soc.destroy();
 					return;
 				}
