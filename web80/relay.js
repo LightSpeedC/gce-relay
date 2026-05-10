@@ -298,13 +298,18 @@ async function relay(req, res, log, dt, opts) {
 					const remSvr = servers.get(remSv);
 					const func = remSvr.recvs.shift();
 					if (!func) {
-						remSvr.sends.push(() => {
-							const func = remSvr.recvs.shift();
-							func.resOK('snd1', { x: 'C[3030]', ...opts }, data);
+						const sendEntry = () => {
+							const f = remSvr.recvs.shift();
+							f.resOK('snd1', { x: 'C[3030]', ...opts }, data);
 							resOK('snd2', { x: 'C[3030]', ...opts });
-						});
-						// resNG('snd1.err', { x: 'C[3030]', sv, svID, svc, cID, message: 'no buffers' });
-						return; // 'snd1.err eh!? no buffers');
+						};
+						sendEntry.timer = setTimeout(() => {
+							const ii = remSvr.sends.indexOf(sendEntry);
+							if (ii >= 0) remSvr.sends.splice(ii, 1);
+							resNG('snd1.err', { x: 'C[3030.timeout]', ...opts, message: 'remote no buffers timeout' });
+						}, SENDS_TIMEOUT);
+						remSvr.sends.push(sendEntry);
+						return;
 					}
 					func.resOK('snd1', { x: 'C[3030]', ...opts }, data);
 					resOK('snd2', { x: 'C[3030]', ...opts });
@@ -328,13 +333,18 @@ async function relay(req, res, log, dt, opts) {
 
 				const func = svr.recvs.shift();
 				if (!func) {
-					svr.sends.push(() => {
-						const func = svr.recvs.shift();
-						func.resOK('snd6', { x: 'C[3220]', ...opts }, data);
+					const sendEntry = () => {
+						const f = svr.recvs.shift();
+						f.resOK('snd6', { x: 'C[3220]', ...opts }, data);
 						resOK('snd7', { x: 'C[3220]', ...opts });
-					});
-					// resNG('snd6.err', { x: 'C[3210.snd6.xxxx]', sv, svID, svc, cID, message: 'no buffers' });
-					return; // 'snd6.err eh!? no buffers'
+					};
+					sendEntry.timer = setTimeout(() => {
+						const ii = svr.sends.indexOf(sendEntry);
+						if (ii >= 0) svr.sends.splice(ii, 1);
+						resNG('snd6.err', { x: 'C[3220.timeout]', ...opts, message: 'local no buffers timeout' });
+					}, SENDS_TIMEOUT);
+					svr.sends.push(sendEntry);
+					return;
 				}
 				// C[3220]
 				func.resOK('snd6', { x: 'C[3220]', ...opts }, data);
@@ -362,12 +372,17 @@ async function relay(req, res, log, dt, opts) {
 					const remSvr = servers.get(remSv);
 					const func = remSvr.recvs.shift();
 					if (!func) { // no buffers then push sends
-						remSvr.sends.push(() => {
-							const func = remSvr.recvs.shift();
-							func.resOK('end1', { x: '[end1.xxxx2]', ...opts });
+						const sendEntry = () => {
+							const f = remSvr.recvs.shift();
+							f.resOK('end1', { x: '[end1.xxxx2]', ...opts });
 							resOK('end2', { x: '[end1.xxxx2]', ...opts });
-						});
-						// resNG('end.err', { x: '[end1.xxxx3]', sv, svID, svc, cID, message: 'no buffers' });
+						};
+						sendEntry.timer = setTimeout(() => {
+							const ii = remSvr.sends.indexOf(sendEntry);
+							if (ii >= 0) remSvr.sends.splice(ii, 1);
+							resNG('end1.err', { x: '[end1.xxxx3.timeout]', ...opts, message: 'remote no buffers timeout' });
+						}, SENDS_TIMEOUT);
+						remSvr.sends.push(sendEntry);
 						return;
 					}
 					func.resOK('end1', { x: '[end1.xxxx3]', ...opts });
@@ -392,11 +407,17 @@ async function relay(req, res, log, dt, opts) {
 
 				const func = svr.recvs.shift();
 				if (!func) { // no buffers then push sends
-					svr.sends.push(() => {
-						const func = svr.recvs.shift();
-						func.resOK('end6', { x: '[end6.xxxx2]', ...opts }, data);
+					const sendEntry = () => {
+						const f = svr.recvs.shift();
+						f.resOK('end6', { x: '[end6.xxxx2]', ...opts }, data);
 						resOK('end7', { x: '[end6.xxxx3]', ...opts });
-					});
+					};
+					sendEntry.timer = setTimeout(() => {
+						const ii = svr.sends.indexOf(sendEntry);
+						if (ii >= 0) svr.sends.splice(ii, 1);
+						resNG('end6.err', { x: '[end6.xxxx4.timeout]', ...opts, message: 'local no buffers timeout' });
+					}, SENDS_TIMEOUT);
+					svr.sends.push(sendEntry);
 					return;
 				}
 				// [end6.xxxx]
