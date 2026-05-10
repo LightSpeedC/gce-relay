@@ -65,8 +65,11 @@ async function main(log) {
 				const res1 = await rpc(agent, port, 'GET', 'conn',
 					{ x: 'L[2000]', sv, svID, port, svc, cID });
 				// L[2030] con2
-				if (res1.status !== 200)
-					log.warn && log.warn(getNow(), port, sv, svc, 'L[2030] conn.status:', res1.status);
+				if (res1.status !== 200) {
+					log.warn && log.warn(getNow(), port, sv, svc, ...redError('L[2030] conn.status: ' + res1.status));
+					soc.destroy();
+					return;
+				}
 
 				let dataList = [], dataLength = 0, dataTimer = null;
 
@@ -358,8 +361,18 @@ async function main(log) {
 					else if (cmd === 'con3') { // L[2230.xxxx] con3
 						const locConn = localConnections.get(cID);
 						log.trace && log.trace(dt, threadId, locSv, 'con3:', cID, locConn ? 'exists' : 'not exists');
-						if (!locConn || locConn.status !== 'connecting') throw new Error('eh!? L[2230] con1: status != connecting');
-						locConn.status = 'connected';
+						if (!locConn) {
+							log.warn && log.warn(dt, threadId, locSv, ...redError('L[2230] con3: locConn not found cID=' + cID));
+							try {
+								await rpc(agent, threadId, 'GET', 'end1', { x: 'L[2230.discard]', sv, svID, svc, cID });
+							} catch (err) {
+								log.trace && log.trace(dt, threadId, locSv, 'L[2230] con3 end1 cleanup err:', ...redError(err));
+							}
+						} else if (locConn.status !== 'connecting') {
+							log.warn && log.warn(dt, threadId, locSv, ...redError('L[2230] con3: status=' + locConn.status + ' cID=' + cID));
+						} else {
+							locConn.status = 'connected';
+						}
 					}
 					else if (cmd === 'init') { // X[0140] init
 						log.trace && log.trace(dt, threadId, COLOR_CYAN + locSv, 'init: X[0140]',
