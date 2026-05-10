@@ -44,8 +44,10 @@ const SENDS_TIMEOUT = 30 * 1000; // 30 seconds: timeout for sends queue waiting
 const servers = new Map();
 
 // flush sends queue with timer cleanup
+// recvs.length もチェック: 1つの recv に対して sends を1つだけ処理する
+// これにより sendEntry 内の recvs.shift() が undefined になるのを防ぐ
 function flushSends(svr) {
-	while (svr.sends.length) {
+	while (svr.sends.length && svr.recvs.length) {
 		const sendFunc = svr.sends.shift();
 		if (sendFunc && sendFunc.timer) clearTimeout(sendFunc.timer);
 		sendFunc();
@@ -223,6 +225,11 @@ async function relay(req, res, log, dt, opts) {
 					if (!func) {
 						const sendEntry = () => {
 							const f = remSvr.recvs.shift();
+							if (!f) {
+								log.warn && log.warn(dt, 'conn: C[2100] recvs unexpectedly empty', sv, svID, svc, cID);
+								resNG('conn.err', { x: 'C[2100.empty]', sv, svID, svc, cID, message: 'recvs unexpectedly empty' }, undefined, 503);
+								return;
+							}
 							f.resOK('conn', { x: 'C[2100]', sv, svID, svc, cID });
 							resOK('con2', { x: 'C[2020]', cID });
 						};
@@ -261,6 +268,11 @@ async function relay(req, res, log, dt, opts) {
 				if (!func) {
 					const sendEntry = () => {
 						const f = locSvr.recvs.shift();
+						if (!f) {
+							log.warn && log.warn(dt, 'con1: C[2220] recvs unexpectedly empty', sv, svID, svc, cID);
+							resNG('con1.err', { x: 'C[2220.empty]', sv, svID, svc, cID, message: 'recvs unexpectedly empty' }, undefined, 503);
+							return;
+						}
 						f.resOK('con3', { x: 'C[2220]', sv, svID, svc, cID });
 						resOK('con4', { x: 'C[2220]', sv, svID, svc, cID });
 					};
@@ -305,6 +317,11 @@ async function relay(req, res, log, dt, opts) {
 					if (!func) {
 						const sendEntry = () => {
 							const f = remSvr.recvs.shift();
+							if (!f) {
+								log.warn && log.warn(dt, 'snd1: C[3030] recvs unexpectedly empty', opts);
+								resNG('snd1.err', { x: 'C[3030.empty]', ...opts, message: 'recvs unexpectedly empty' }, undefined, 503);
+								return;
+							}
 							f.resOK('snd1', { x: 'C[3030]', ...opts }, data);
 							resOK('snd2', { x: 'C[3030]', ...opts });
 						};
@@ -340,6 +357,11 @@ async function relay(req, res, log, dt, opts) {
 				if (!func) {
 					const sendEntry = () => {
 						const f = svr.recvs.shift();
+						if (!f) {
+							log.warn && log.warn(dt, 'snd6: C[3220] recvs unexpectedly empty', opts);
+							resNG('snd6.err', { x: 'C[3220.empty]', ...opts, message: 'recvs unexpectedly empty' }, undefined, 503);
+							return;
+						}
 						f.resOK('snd6', { x: 'C[3220]', ...opts }, data);
 						resOK('snd7', { x: 'C[3220]', ...opts });
 					};
@@ -379,6 +401,11 @@ async function relay(req, res, log, dt, opts) {
 					if (!func) { // no buffers then push sends
 						const sendEntry = () => {
 							const f = remSvr.recvs.shift();
+							if (!f) {
+								log.warn && log.warn(dt, 'end1: [end1.xxxx2] recvs unexpectedly empty', opts);
+								resNG('end1.err', { x: '[end1.xxxx2.empty]', ...opts, message: 'recvs unexpectedly empty' }, undefined, 503);
+								return;
+							}
 							f.resOK('end1', { x: '[end1.xxxx2]', ...opts });
 							resOK('end2', { x: '[end1.xxxx2]', ...opts });
 						};
@@ -419,6 +446,11 @@ async function relay(req, res, log, dt, opts) {
 				if (!func) { // no buffers then push sends
 					const sendEntry = () => {
 						const f = svr.recvs.shift();
+						if (!f) {
+							log.warn && log.warn(dt, 'end6: [end6.xxxx2] recvs unexpectedly empty', opts);
+							resNG('end6.err', { x: '[end6.xxxx2.empty]', ...opts, message: 'recvs unexpectedly empty' }, undefined, 503);
+							return;
+						}
 						f.resOK('end6', { x: '[end6.xxxx2]', ...opts }, data);
 						resOK('end7', { x: '[end6.xxxx3]', ...opts });
 					};
