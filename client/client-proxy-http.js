@@ -207,7 +207,7 @@ async function main(log) {
 
 	// X: Local/Remote: recv
 	for (let i = 0; i < MAX_THREADS; ++i) {
-		await sleep(i * 1000);
+		await sleep(1000);
 		thread(1000 + i, i);
 		async function thread(threadId, i) {
 			let agent = new http.Agent(AGENT_KEEP_ALIVE);
@@ -451,12 +451,22 @@ async function main(log) {
 						remoteConnections.delete(cID);
 					}
 					else if (cmd === 'time') { // time timeOut
-						// TODO
-						log.warn && log.warn(getNow(), threadId, COLOR_BLUE + 'time' + COLOR_RESET);
+						log.debug && log.debug(getNow(), threadId, COLOR_BLUE + 'time' + COLOR_RESET);
 					}
 					else if (cmd === 'disc') { // X[0190] disc disconnect
-						// TODO
-						log.error && log.error(getNow(), threadId, ...redError('disc'));
+						log.warn && log.warn(getNow(), threadId, ...redError('disc: server reload detected'));
+						localConnections.forEach(conn => {
+							if (conn && conn.socket) {
+								try { conn.socket.destroy(); } catch (err) { /* ignore */ }
+							}
+						});
+						remoteConnections.forEach(conn => {
+							if (conn && conn.socket) {
+								try { conn.socket.destroy(); } catch (err) { /* ignore */ }
+							}
+						});
+						localConnections.clear();
+						remoteConnections.clear();
 					}
 					else {
 						log.fatal && log.fatal(dt, threadId, ...redError(locSv + ' recv: cmd.err: \"' + cmd + '\"'));
@@ -496,8 +506,9 @@ async function main(log) {
 		else if (!body && method !== 'GET')
 			log.error && log.error(getNow(), num, ...redError(method + ' method does not have body'));
 		if (body) convertBuffer(body);
+		const timeoutMsec = cmd === 'recv' ? undefined : 30 * 1000; // 30sec timeout for non-recv RPC
 		const res = await httpRequest({
-			method, body, targetURL, proxyURL, agent,
+			method, body, targetURL, proxyURL, agent, timeoutMsec,
 			headers: {
 				[xRelayOptions]: JSON.stringify(Object.assign({ cmd }, args)),
 			},

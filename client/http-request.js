@@ -16,10 +16,11 @@ module.exports = httpRequest;
  *		body: Buffer | string | null | undefined, // contents to send
  *		targetURL: string, // URL
  *		proxyURL: string, // URL
+ *		timeoutMsec: number, // request timeout in milliseconds (optional)
  * }
  * @returns any {headers: object, body: Buffer}
  */
-function httpRequest({ method, headers, body, targetURL, proxyURL, agent }) {
+function httpRequest({ method, headers, body, targetURL, proxyURL, agent, timeoutMsec }) {
 
 	return new Promise((resolve, reject) => {
 
@@ -64,6 +65,12 @@ function httpRequest({ method, headers, body, targetURL, proxyURL, agent }) {
 			});
 
 		});
+
+		if (timeoutMsec) {
+			req.setTimeout(timeoutMsec, () => {
+				req.destroy(new Error('rpc timeout'));
+			});
+		}
 
 		req.on('error', reject);
 		if (body) req.write(body, err => err && reject(err));

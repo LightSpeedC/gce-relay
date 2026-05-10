@@ -38,9 +38,19 @@ command
 */
 
 const GC_TIMEOUT = 10 * 60 * 1000; // 10 minutes: remove server entry if no recv arrives
+const SENDS_TIMEOUT = 30 * 1000; // 30 seconds: timeout for sends queue waiting
 
 // servers
 const servers = new Map();
+
+// flush sends queue with timer cleanup
+function flushSends(svr) {
+	while (svr.sends.length) {
+		const sendFunc = svr.sends.shift();
+		if (sendFunc && sendFunc.timer) clearTimeout(sendFunc.timer);
+		sendFunc();
+	}
+}
 /*
 [sv]: {
 	svID: 'svID', // serverID
@@ -142,7 +152,7 @@ async function relay(req, res, log, dt, opts) {
 						}
 					}, timeOut * 1000);
 					svr.recvs.push(func);
-					if (svr.sends.length) svr.sends.shift()();
+					flushSends(svr);
 				}
 				else {
 					servers.set(sv, {
@@ -211,13 +221,18 @@ async function relay(req, res, log, dt, opts) {
 					const remSvr = servers.get(remSv);
 					const func = remSvr.recvs.shift();
 					if (!func) {
-						remSvr.sends.push(() => {
-							const func = remSvr.recvs.shift();
-							func.resOK('conn', { x: 'C[2100]', sv, svID, svc, cID });
+						const sendEntry = () => {
+							const f = remSvr.recvs.shift();
+							f.resOK('conn', { x: 'C[2100]', sv, svID, svc, cID });
 							resOK('con2', { x: 'C[2020]', cID });
-						});
-						// resNG('conn.err', { sv, svID, svc, cID, message: 'no buffers' });
-						return; // 'conn.err eh!? no buffers'
+						};
+						sendEntry.timer = setTimeout(() => {
+							const ii = remSvr.sends.indexOf(sendEntry);
+							if (ii >= 0) remSvr.sends.splice(ii, 1);
+							resNG('conn.err', { x: 'C[2100.timeout]', sv, svID, svc, cID, message: 'remote no buffers timeout' });
+						}, SENDS_TIMEOUT);
+						remSvr.sends.push(sendEntry);
+						return;
 					}
 					// log.trace && log.trace(COLOR_RED_BOLD, { sv, svID, svc, cID }, COLOR_RESET);
 					// log.trace && log.trace(COLOR_RED_BOLD, remSvr, COLOR_RESET);
@@ -243,13 +258,18 @@ async function relay(req, res, log, dt, opts) {
 
 				const func = locSvr.recvs.shift();
 				if (!func) {
-					locSvr.sends.push(() => {
-						const func = locSvr.recvs.shift();
-						func.resOK('con3', { x: 'C[2220]', sv, svID, svc, cID });
+					const sendEntry = () => {
+						const f = locSvr.recvs.shift();
+						f.resOK('con3', { x: 'C[2220]', sv, svID, svc, cID });
 						resOK('con4', { x: 'C[2220]', sv, svID, svc, cID });
-					});
-					// resNG('con1.err', { x: 'C[2210]', sv, svID, svc, cID, message: 'no buffers' });
-					return; // 'con1.err eh!? no buffers'
+					};
+					sendEntry.timer = setTimeout(() => {
+						const ii = locSvr.sends.indexOf(sendEntry);
+						if (ii >= 0) locSvr.sends.splice(ii, 1);
+						resNG('con1.err', { x: 'C[2220.timeout]', sv, svID, svc, cID, message: 'local no buffers timeout' });
+					}, SENDS_TIMEOUT);
+					locSvr.sends.push(sendEntry);
+					return;
 				}
 				// C[2220] con1
 				func.resOK('con3', { x: 'C[2220]', sv, svID, svc, cID });
