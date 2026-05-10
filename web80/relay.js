@@ -275,6 +275,10 @@ async function relay(req, res, log, dt, opts) {
 				// C[2220] con1
 				func.resOK('con3', { x: 'C[2220]', sv, svID, svc, cID });
 				resOK('con4', { x: 'C[2220]', sv, svID, svc, cID });
+				// 接続状態を connected に更新
+				if (locSvr.connections[cID]) {
+					locSvr.connections[cID].status = 'connected';
+				}
 			}
 			return;
 		case 'snd1': // C[3020] snd1 (local service -> remote service)
@@ -394,6 +398,11 @@ async function relay(req, res, log, dt, opts) {
 					return;
 				}
 				resOK('end2', { x: '[end1.xxxx5]', ...opts });
+				// 接続をクローズして削除
+				if (svr.connections[cID]) {
+					svr.connections[cID].status = 'closed';
+					delete svr.connections[cID];
+				}
 			}
 			return;
 		case 'end6': // [end6.xxxx] end6 (remote service -> local service)
@@ -424,6 +433,11 @@ async function relay(req, res, log, dt, opts) {
 				// [end6.xxxx]
 				func.resOK('end6', { x: '[end6.xxxx4]', ...opts }, data);
 				resOK('end7', { x: '[end6.xxxx5]', ...opts });
+				// 接続をクローズして削除
+				if (svr.connections[cID]) {
+					svr.connections[cID].status = 'closed';
+					delete svr.connections[cID];
+				}
 			}
 			return;
 		case 'snd2': // C[3060]
