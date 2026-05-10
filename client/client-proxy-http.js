@@ -101,12 +101,16 @@ async function main(log) {
 					},
 					writeLocal(seq, data, onErr) {
 						this.sends[seq] = () => {
-							if (this.socket && !this.socket.destroyed) {
-								this.socket.write(data, onErr);
-								log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
+							if (this.socket && !this.socket.destroyed && this.socket.writable) {
+								try {
+									this.socket.write(data, onErr);
+									log.trace && log.trace(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal');
+								} catch (err) {
+									log.warn && log.warn(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: write threw', (err && err.code), ...redError(err));
+								}
 							}
 							else
-								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is ' + (!this.socket ? 'null' : 'destroyed'));
+								log.trace && log.error(getNow(), port, sv, 'wrlc:', svc, cID, 'r#:', seq, 'writeLocal: data lost - socket is ' + (!this.socket ? 'null' : (this.socket.destroyed ? 'destroyed' : 'not writable')));
 						};
 						this.flushLocal();
 					},
@@ -299,12 +303,16 @@ async function main(log) {
 							},
 							writeRemote(seq, data, onErr) {
 								this.sends[seq] = () => {
-									if (this.socket && !this.socket.destroyed) {
-										this.socket.write(data, onErr);
-										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
+									if (this.socket && !this.socket.destroyed && this.socket.writable) {
+										try {
+											this.socket.write(data, onErr);
+											log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote');
+										} catch (err) {
+											log.warn && log.warn(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: write threw', (err && err.code), ...redError(err));
+										}
 									}
 									else
-										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is ' + (!this.socket ? 'null' : 'destroyed'));
+										log.trace && log.trace(getNow(), threadId, 'wrrm:', locSv, cID, 'l#:', seq, 'writeRemote: data lost - socket is ' + (!this.socket ? 'null' : (this.socket.destroyed ? 'destroyed' : 'not writable')));
 								};
 								this.flushRemote();
 							},
@@ -383,7 +391,7 @@ async function main(log) {
 						const locConn = localConnections.get(cID);
 						log.trace && log.trace(dt, threadId, locSv, 'con3:', cID, locConn ? 'exists' : 'not exists');
 						if (!locConn) {
-							log.warn && log.warn(dt, threadId, locSv, ...redError('L[2230] con3: locConn not found cID=' + cID));
+							log.debug && log.debug(dt, threadId, locSv, 'L[2230] con3: locConn already deleted (race) cID=' + cID);
 							try {
 								await rpc(agent, threadId, 'GET', 'end1', { x: 'L[2230.discard]', sv, svID, svc, cID });
 							} catch (err) {
@@ -442,8 +450,14 @@ async function main(log) {
 							// R[3050]
 							const res = await rpc(agent, threadId, 'GET', 'snd2',
 								{ x: 'R[3050]', sv, svID, svc, cID });
-							if (res.status !== 200)
-								log.warn && log.warn(dt, threadId, locSv, ...redError('snd2: R[3050] snd2.sts: ' + res.status));
+							if (res.status !== 200) {
+								if (res.status === 404)
+									log.error && log.error(getNow(), threadId, sv, svc, ...redError('snd1: R[3050] snd2 failed (service not found) cID=' + cID));
+								else if (res.status === 503)
+									log.warn && log.warn(getNow(), threadId, sv, svc, ...redError('snd1: R[3050] snd2 failed (temporary) cID=' + cID));
+								else
+									log.warn && log.warn(getNow(), threadId, sv, svc, ...redError('snd1: R[3050] snd2.sts: ' + res.status));
+							}
 						} catch (err) {
 							// TODO
 							log.warn && log.warn(dt, threadId, locSv, ...redError('snd2: R[3050] snd2.err:'), ...redError(err));
@@ -456,7 +470,7 @@ async function main(log) {
 							locConn.writeLocal(remSeq, res.body,
 								err => err && log.warn && log.warn(dt, threadId, locSv, 'snd8:', cID, 'L[3230]', ...redError(err)));
 						else
-							log.warn && log.warn(dt, threadId, locSv, 'snd8:', cID, 'L[3230]', ...redError('locConn.socket is null'));
+							log.debug && log.debug(dt, threadId, locSv, 'snd8:', cID, 'L[3230]', 'locConn already closed (race)');
 					}
 					else if (cmd === 'end1') { // R[end1.xxxx] end1
 						const { locSeq } = res.options;
